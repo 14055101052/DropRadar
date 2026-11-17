@@ -28,7 +28,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "32kb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-const RESTRICTED_CATALOG_PATTERN = /\\b(?:firearms?|guns?|ammunition|ammo|rifles?|pistols?|shotguns?|knives?|switchblades?|swords?|tasers?|pepper\\s+spray|self[-\\s]?defen[cs]e|cannabis|marijuana|weed|thc|cbd|cocaine|heroin|methamphetamine|ecstasy|nicotine|tobacco|cigarettes?|vapes?|vaping|e[-\\s]?cigarettes?|alcohol|liquor|beer|wine|gambling|casino|sports?\\s+betting|betting|pesticides?|poisons?|toxic\\s+chemicals?)\\b/i;
+const RESTRICTED_CATALOG_PATTERN = /\b(?:firearms?|guns?|ammunition|ammo|rifles?|pistols?|shotguns?|knives?|switchblades?|swords?|tasers?|pepper\s+spray|self[-\s]?defen[cs]e|cannabis|marijuana|weed|thc|cbd|cocaine|heroin|methamphetamine|ecstasy|nicotine|tobacco|cigarettes?|vapes?|vaping|e[-\s]?cigarettes?|alcohol|liquor|beer|wine|gambling|casino|sports?\s+betting|betting|pesticides?|poisons?|toxic\s+chemicals?)\b/i;
 
 function containsRestrictedCatalogContent(value) {
   return RESTRICTED_CATALOG_PATTERN.test(String(value || ""));
