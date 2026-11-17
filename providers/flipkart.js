@@ -15,6 +15,27 @@ function safeHttpUrl(value) {
   }
 }
 
+function readCategoryNames(categoryPath) {
+  if (!categoryPath) return [];
+  let parsed = categoryPath;
+  if (typeof parsed === "string") {
+    try { parsed = JSON.parse(parsed); } catch { return []; }
+  }
+  const names = [];
+  const visit = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    if (typeof value.title === "string") names.push(value.title);
+    if (typeof value.node_name === "string") names.push(value.node_name);
+    Object.values(value).forEach(visit);
+  };
+  visit(parsed);
+  return [...new Set(names.map((name) => name.trim()).filter(Boolean))];
+}
+
 function normalizeProduct(entry) {
   const base = entry?.productBaseInfoV1 || {};
   const shipping = entry?.productShippingInfoV1 || {};
@@ -31,6 +52,7 @@ function normalizeProduct(entry) {
     id: String(base.productId || productUrl),
     title,
     brand: String(base.productBrand || "").trim(),
+    categories: readCategoryNames(base.categoryPath),
     price: numeric(price?.amount),
     currency: String(price?.currency || mrp?.currency || "INR"),
     mrp: numeric(mrp?.amount),
