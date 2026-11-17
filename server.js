@@ -28,6 +28,12 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "32kb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
+const RESTRICTED_CATALOG_PATTERN = /\\b(?:firearms?|guns?|ammunition|ammo|rifles?|pistols?|shotguns?|knives?|switchblades?|swords?|tasers?|pepper\\s+spray|self[-\\s]?defen[cs]e|cannabis|marijuana|weed|thc|cbd|cocaine|heroin|methamphetamine|ecstasy|nicotine|tobacco|cigarettes?|vapes?|vaping|e[-\\s]?cigarettes?|alcohol|liquor|beer|wine|gambling|casino|sports?\\s+betting|betting|pesticides?|poisons?|toxic\\s+chemicals?)\\b/i;
+
+function containsRestrictedCatalogContent(value) {
+  return RESTRICTED_CATALOG_PATTERN.test(String(value || ""));
+}
+
 function identifyMerchant(raw) {
   let url;
   try { url = new URL(raw); } catch { return null; }
@@ -90,10 +96,20 @@ app.get("/api/health", async (_req, res, next) => {
 app.get("/api/search", async (req, res) => {
   const q = String(req.query.q || "").trim().slice(0, 100);
   if (q.length < 2) return res.status(400).json({ error: "Enter at least 2 characters." });
+  if (containsRestrictedCatalogContent(q)) {
+    return res.status(400).json({
+      code: "CATEGORY_NOT_SUPPORTED",
+      message: "This product category isn't supported by DropRadar."
+    });
+  }
 
   res.set("Cache-Control", "no-store");
   try {
-    const items = await searchFlipkartProducts(q);
+    const providerItems = await searchFlipkartProducts(q);
+    const items = providerItems.filter((item) => {
+      const searchable = [item.title, item.brand, ...(item.categories || []), ...(item.keySpecs || [])].join(" ");
+      return !containsRestrictedCatalogContent(searchable);
+    });
     return res.json({
       query: q,
       provider: "Flipkart",
