@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f7f8fa"><meta name="description" content="Discover smarter. Compare better. Track what matters.">
+  <link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css"><title>DropRadar — Shop smarter</title>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/" aria-label="DropRadar home"><span class="brand-mark">D</span><span>drop<span class="brand-accent">radar</span></span></a>
+  <nav><a href="#discover" class="nav-link active">Discover</a><a href="#watchlist" class="nav-link">My watchlist</a></nav>
+  <button class="avatar" aria-label="Account">M</button>
+</header>
+<main>
+  <section class="hero" id="discover">
+    <div class="eyebrow"><span class="pulse"></span> YOUR SMARTER WAY TO SHOP</div>
+    <h1>Good finds.<br><span>Better timing.</span></h1>
+    <p class="hero-copy">Find what you love, keep an eye on prices, and shop when it makes sense.</p>
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input id="searchInput" type="search" placeholder="Search products, brands or describe what you need…" autocomplete="off">
+      <button id="searchButton" class="primary-btn">Search <span>→</span></button>
+    </div>
+    <div class="quick-links"><span>Try searching</span><button data-query="wireless headphones">Wireless headphones</button><button data-query="running shoes">Running shoes</button><button data-query="smartwatch">Smartwatch</button></div>
+    <div id="searchNotice" class="notice hidden" role="status"></div>
+  </section>
+  <section class="section intro-row">
+    <div><div class="eyebrow muted">A LITTLE MORE CLARITY</div><h2>Shop with a plan.</h2></div>
+    <p>Less scrolling. More confidence in what you're buying.</p>
+  </section>
+  <section class="feature-grid">
+    <article class="feature-card"><div class="feature-icon lilac">⌕</div><h3>Discover</h3><p>Search for products and find relevant options in one place.</p></article>
+    <article class="feature-card"><div class="feature-icon mint">⇄</div><h3>Compare</h3><p>Understand prices and product differences before deciding.</p></article>
+    <article class="feature-card"><div class="feature-icon peach">↘</div><h3>Track</h3><p>Save a product and set the price you'd be happy to pay.</p></article>
+  </section>
+  <section class="section watch-section" id="watchlist">
+    <div class="section-heading"><div><div class="eyebrow muted">YOUR SHORTLIST</div><h2>Things to keep an eye on</h2></div><button id="refreshButton" class="text-btn">Refresh ↻</button></div>
+    <div class="add-panel">
+      <div class="add-copy"><strong>Have a product link already?</strong><span>Paste it here to add it to your watchlist.</span></div>
+      <button id="toggleAdd" class="secondary-btn">＋ Add a link</button>
+      <form id="addForm" class="add-form hidden">
+        <label>Product name<input name="title" required maxlength="140" placeholder="e.g. Sony WH-1000XM5"></label>
+        <label>Product URL<input name="url" type="url" required placeholder="https://…"></label>
+        <label>Target price <span class="optional">(optional, ₹)</span><input name="targetPrice" type="number" min="1" step="1" placeholder="e.g. 18000"></label>
+        <div class="form-actions"><button type="button" id="cancelAdd" class="text-btn">Cancel</button><button class="primary-btn" type="submit">Save to watchlist</button></div>
+      </form>
+    </div>
+    <div id="watchlistItems" class="watchlist"><div class="empty-state"><div class="empty-icon">♡</div><strong>Your watchlist starts here</strong><p>Save a product link and set a target price to keep your shortlist organised.</p></div></div>
+    <p class="fine-print">Saving a link does not mean its price is being monitored yet. Live tracking starts only when an approved retailer data connection is available.</p>
+  </section>
+</main>
+<footer><a class="brand small-brand" href="/"><span class="brand-mark">D</span><span>drop<span class="brand-accent">radar</span></span></a><span>Discover. Compare. Track. Shop.</span><span>Built for better decisions.</span></footer>
+<div id="toast" class="toast" role="status"></div>
+<script src="/app.js"></script>
+</body></html>
