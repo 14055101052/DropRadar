@@ -16,6 +16,7 @@ With DATABASE_URL, the API uses PostgreSQL. Keep connection strings private.
 
 - Responsive shopping-focused interface.
 - Flipkart product search adapter using the official affiliate product search API.
+- Server-side safety checks on search queries and retailer category metadata.
 - Product cards with retailer images, title, available price, MRP, discount and stock fields when supplied by the API.
 - Product-link watchlist with title, merchant, and optional target price.
 - Duplicate-link validation and delete.
