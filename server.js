@@ -3,6 +3,7 @@ const helmet = require("helmet");
 const path = require("path");
 const Database = require("better-sqlite3");
 const { Pool } = require("pg");
+const { searchFlipkartProducts } = require("./providers/flipkart");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -84,13 +85,44 @@ app.get("/api/health", async (_req, res, next) => {
   } catch (error) { next(error); }
 });
 
-app.get("/api/search", (req, res) => {
-  const q = String(req.query.q || "").trim();
+app.get("/api/search", async (req, res) => {
+  const q = String(req.query.q || "").trim().slice(0, 100);
   if (q.length < 2) return res.status(400).json({ error: "Enter at least 2 characters." });
-  return res.status(503).json({
-    code: "SEARCH_PROVIDER_NOT_CONFIGURED",
-    message: "Product search is not connected yet. DropRadar will only show verified retailer data once a provider is configured."
-  });
+
+  res.set("Cache-Control", "no-store");
+  try {
+    const items = await searchFlipkartProducts(q);
+    return res.json({
+      query: q,
+      provider: "Flipkart",
+      fetchedAt: new Date().toISOString(),
+      items
+    });
+  } catch (error) {
+    if (error.code === "FLIPKART_CREDENTIALS_MISSING") {
+      return res.status(503).json({
+        code: error.code,
+        message: "Flipkart search is ready in the app, but approved affiliate API credentials still need to be configured."
+      });
+    }
+    if (error.code === "FLIPKART_AUTH_ERROR") {
+      return res.status(503).json({
+        code: error.code,
+        message: "Flipkart did not accept the configured affiliate credentials. Check them in Render environment settings."
+      });
+    }
+    if (error.code === "FLIPKART_RATE_LIMITED") {
+      return res.status(429).json({
+        code: error.code,
+        message: "Product search is busy right now. Please try again shortly."
+      });
+    }
+    console.error("Flipkart search failed:", error.message);
+    return res.status(502).json({
+      code: "PRODUCT_PROVIDER_ERROR",
+      message: "We couldn't retrieve verified product results right now. Please try again."
+    });
+  }
 });
 
 app.get("/api/watchlist", async (_req, res, next) => {
