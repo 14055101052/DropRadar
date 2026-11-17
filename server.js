@@ -80,7 +80,9 @@ app.get("/api/health", async (_req, res, next) => {
       service: "DropRadar",
       version: "0.2.0",
       storage: pool ? "hosted-postgresql" : "local-sqlite-temporary",
-      productSearch: "provider-not-configured"
+      productSearch: process.env.FLIPKART_AFFILIATE_ID && process.env.FLIPKART_AFFILIATE_TOKEN
+        ? "flipkart-credentials-configured"
+        : "flipkart-credentials-needed"
     });
   } catch (error) { next(error); }
 });
