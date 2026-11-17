@@ -1,56 +1,47 @@
 # DropRadar
 
-Responsive shopping discovery PWA with a Node.js API, product-link watchlist, and optional hosted PostgreSQL storage.
+A responsive shopping-discovery PWA with a Node.js API, product-link watchlist, side-by-side comparison UI, and optional PostgreSQL storage.
 
 ## Run locally
 
 1. Install Node.js 24.22.1.
-2. Run npm install.
-3. Run npm start.
+2. Run \`npm install\`.
+3. Run \`npm start\`.
 4. Open http://localhost:3000.
 
-Without DATABASE_URL, local development uses SQLite at dropradar.db.
-With DATABASE_URL, the API uses PostgreSQL. Keep connection strings private.
+Without \`DATABASE_URL\`, local development uses SQLite at \`dropradar.db\`.
+With \`DATABASE_URL\`, the API uses PostgreSQL. Keep connection strings private.
 
-## Included
+## Current product experience
 
-- Responsive shopping-focused interface.
-- Flipkart product search adapter using the official affiliate product search API.
-- Server-side safety checks on search queries and retailer category metadata.
-- Product cards with retailer images, title, available price, MRP, discount and stock fields when supplied by the API.
-- Product-link watchlist with title, merchant, and optional target price.
-- Duplicate-link validation and delete.
-- PostgreSQL driver and automatic watchlist table setup when DATABASE_URL is configured.
-- Local SQLite fallback for development only.
+- Multi-store filter bar: Best From All Stores, Amazon, Flipkart, Myntra, Croma, AJIO and Tata CLiQ.
+- Best From All Stores sorts verified listings by ascending current price.
+- Product cards support direct retailer links and one-tap watchlist saving.
+- Selecting one to three listings opens a side-by-side comparison table.
+- Comparison fields include store, current price, delivery estimate, seller rating and return policy.
+- Missing fields are shown as "Not supplied"; no store detail is guessed.
+- The buying verdict is currently a transparent price comparison rule, not an AI-generated recommendation.
+- Watchlist items allow target-price editing.
+- Server-side category safety checks apply to search and saved item titles.
+- PostgreSQL setup is optional; local SQLite is available for development.
 - PWA manifest and service-worker shell caching.
-- API health endpoint at /api/health.
+- API health at \`/api/health\` and store metadata at \`/api/stores\`.
 
-## Enable Flipkart product search
+## Product data integrations
 
-DropRadar uses the official Flipkart Affiliate API. You need an approved Flipkart affiliate account and its API credentials. The search API returns up to 10 items per request. Search is not active until both credentials are configured.
+There are currently **no live retailer product feeds connected**. The search endpoint returns an explicit unavailable response rather than sample listings or fabricated prices.
 
-In the Render service dashboard, add these as secret environment variables:
+No affiliate tracking is used. Buy Now opens the exact retailer product URL supplied by a connected data source, without adding an affiliate tag.
 
-- FLIPKART_AFFILIATE_ID
-- FLIPKART_AFFILIATE_TOKEN
+Amazon's current product catalog API requires an Amazon Associates account and API eligibility. Flipkart's product search API is limited to registered Flipkart Affiliate Program users. Those integrations are therefore not part of the current no-commission build.
 
-Do not add real credentials to GitHub, .env.example, screenshots, or chat. Keep the credentials private in Render's environment-variable settings. If the affiliate account requires an adult account holder, a parent/guardian must genuinely hold and manage that account under the program's rules.
+Before connecting another data provider, verify its store coverage, free-tier limits, data freshness, permitted use, and whether it returns direct retailer URLs. Do not scrape or bypass store protections. Store fields such as delivery estimates, seller ratings and returns must only be shown when supplied by a verified source.
 
-## Hosted database setup (Neon example)
+## Current limitations
 
-1. Create a PostgreSQL project with your database provider.
-2. Copy its pooled or standard PostgreSQL connection string.
-3. In the Render service dashboard, add it as the secret environment variable DATABASE_URL.
-4. Keep the provider's SSL requirement in the connection string (use the connection string supplied by your provider).
-5. Save the environment variable and redeploy. Check /api/health; its storage field should report hosted-postgresql.
-
-Do not paste database passwords or full connection strings into public GitHub files, source code, or chat. Use the hosting provider's secret environment-variable settings.
-
-Neon Free currently advertises 1 GB of storage and 100 compute-hours per project per month. Compute may scale down when idle; review current limits before relying on it for user-facing production data.
-
-## Important current limitations
-
-- Flipkart search requires approved Affiliate API credentials and must be enabled before live results will appear.
-- Other retailer catalogues, price history, price-drop/restock monitoring, AI recommendations, comparison across multiple stores, affiliate deep links and notifications are not connected yet.
-- SQLite fallback on Render Free is temporary: local filesystem data can disappear across deploys/restarts. Configure hosted PostgreSQL before saving real user data.
-- No user authentication or multi-user isolation has been implemented yet. Treat this deployment as a private development build, not a public production shopping service.
+- Search UI is ready, but live product search waits for a non-affiliate, terms-compliant provider.
+- Automatic price monitoring, price history and price-drop notifications are not implemented.
+- Watchlist saves links and optional target prices; this is not yet automatic monitoring.
+- SQLite fallback on Render Free is temporary: local filesystem data can disappear across deploys or restarts.
+- No user authentication or multi-user isolation has been implemented. Treat this deployment as a private development build, not a public production shopping service.
+- The smart verdict only compares supplied prices. It does not score seller reliability or generate an AI recommendation.

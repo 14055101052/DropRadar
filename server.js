@@ -3,7 +3,6 @@ const helmet = require("helmet");
 const path = require("path");
 const Database = require("better-sqlite3");
 const { Pool } = require("pg");
-const { searchFlipkartProducts } = require("./providers/flipkart");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -17,16 +16,18 @@ const pool = DATABASE_URL
     })
   : null;
 
-if (pool) {
-  pool.on("error", (error) => console.error("PostgreSQL pool error:", error.message));
-}
-
-// Local SQLite is for development only. Render Free does not preserve local filesystem data.
+// Without DATABASE_URL, SQLite is useful for local development only.
+// Render's free web-service filesystem is temporary.
 const sqlite = pool ? null : new Database(process.env.DB_PATH || path.join(__dirname, "dropradar.db"));
 
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(express.json({ limit: "32kb" }));
-app.use(express.static(path.join(__dirname, "public")));
+const STORES = [
+  { id: "amazon", name: "Amazon", connected: false },
+  { id: "flipkart", name: "Flipkart", connected: false },
+  { id: "myntra", name: "Myntra", connected: false },
+  { id: "croma", name: "Croma", connected: false },
+  { id: "ajio", name: "AJIO", connected: false },
+  { id: "tatacliq", name: "Tata CLiQ", connected: false }
+];
 
 const RESTRICTED_CATALOG_PATTERN = /\b(?:firearms?|guns?|ammunition|ammo|rifles?|pistols?|shotguns?|knives?|switchblades?|swords?|tasers?|pepper\s+spray|self[-\s]?defen[cs]e|cannabis|marijuana|weed|thc|cbd|cocaine|heroin|methamphetamine|ecstasy|nicotine|tobacco|cigarettes?|vapes?|vaping|e[-\s]?cigarettes?|alcohol|liquor|beer|wine|gambling|casino|sports?\s+betting|betting|pesticides?|poisons?|toxic\s+chemicals?)\b/i;
 
@@ -41,12 +42,20 @@ function identifyMerchant(raw) {
 
   const host = url.hostname.toLowerCase().replace(/^www\./, "");
   const known = [
-    ["amazon.in", "Amazon India"], ["amazon.com", "Amazon"],
-    ["flipkart.com", "Flipkart"], ["myntra.com", "Myntra"],
-    ["ajio.com", "AJIO"], ["nike.com", "Nike"]
+    ["amazon.in", "Amazon"], ["amazon.com", "Amazon"],
+    ["flipkart.com", "Flipkart"],
+    ["myntra.com", "Myntra"],
+    ["croma.com", "Croma"],
+    ["ajio.com", "AJIO"],
+    ["tatacliq.com", "Tata CLiQ"],
+    ["nike.com", "Nike"]
   ];
   const match = known.find(([domain]) => host === domain || host.endsWith("." + domain));
-  return { url: url.toString(), merchant: match ? match[1] : host, supported: Boolean(match) };
+  return {
+    url: url.toString(),
+    merchant: match ? match[1] : host,
+    supported: Boolean(match)
+  };
 }
 
 async function initializeStorage() {
@@ -77,6 +86,10 @@ async function initializeStorage() {
   }
 }
 
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(express.json({ limit: "32kb" }));
+app.use(express.static(path.join(__dirname, "public")));
+
 app.get("/api/health", async (_req, res, next) => {
   try {
     if (pool) await pool.query("SELECT 1");
@@ -84,17 +97,21 @@ app.get("/api/health", async (_req, res, next) => {
     res.json({
       ok: true,
       service: "DropRadar",
-      version: "0.2.0",
+      version: "0.3.0",
       storage: pool ? "hosted-postgresql" : "local-sqlite-temporary",
-      productSearch: process.env.FLIPKART_AFFILIATE_ID && process.env.FLIPKART_AFFILIATE_TOKEN
-        ? "flipkart-credentials-configured"
-        : "flipkart-credentials-needed"
+      productSearch: "no-live-store-provider-connected",
+      affiliateLinks: false
     });
   } catch (error) { next(error); }
 });
 
-app.get("/api/search", async (req, res) => {
+app.get("/api/stores", (_req, res) => {
+  res.json({ stores: STORES });
+});
+
+app.get("/api/search", (req, res) => {
   const q = String(req.query.q || "").trim().slice(0, 100);
+  const store = String(req.query.store || "all").trim().toLowerCase();
   if (q.length < 2) return res.status(400).json({ error: "Enter at least 2 characters." });
   if (containsRestrictedCatalogContent(q)) {
     return res.status(400).json({
@@ -102,45 +119,19 @@ app.get("/api/search", async (req, res) => {
       message: "This product category isn't supported by DropRadar."
     });
   }
-
-  res.set("Cache-Control", "no-store");
-  try {
-    const providerItems = await searchFlipkartProducts(q);
-    const items = providerItems.filter((item) => {
-      const searchable = [item.title, item.brand, ...(item.categories || []), ...(item.keySpecs || [])].join(" ");
-      return !containsRestrictedCatalogContent(searchable);
-    });
-    return res.json({
-      query: q,
-      provider: "Flipkart",
-      fetchedAt: new Date().toISOString(),
-      items
-    });
-  } catch (error) {
-    if (error.code === "FLIPKART_CREDENTIALS_MISSING") {
-      return res.status(503).json({
-        code: error.code,
-        message: "Flipkart search is ready in the app, but approved affiliate API credentials still need to be configured."
-      });
-    }
-    if (error.code === "FLIPKART_AUTH_ERROR") {
-      return res.status(503).json({
-        code: error.code,
-        message: "Flipkart did not accept the configured affiliate credentials. Check them in Render environment settings."
-      });
-    }
-    if (error.code === "FLIPKART_RATE_LIMITED") {
-      return res.status(429).json({
-        code: error.code,
-        message: "Product search is busy right now. Please try again shortly."
-      });
-    }
-    console.error("Flipkart search failed:", error.message);
-    return res.status(502).json({
-      code: "PRODUCT_PROVIDER_ERROR",
-      message: "We couldn't retrieve verified product results right now. Please try again."
-    });
+  if (store !== "all" && !STORES.some((item) => item.id === store)) {
+    return res.status(400).json({ error: "Choose a store from the available filters." });
   }
+
+  // No retailer feed is connected yet. Never return sample or fabricated offers
+  // as if they were current retailer prices.
+  return res.status(503).json({
+    code: "PRODUCT_DATA_SOURCES_NOT_CONNECTED",
+    message: "Live product listings aren't connected yet. DropRadar won't invent prices, ratings, delivery estimates or return policies.",
+    query: q,
+    selectedStore: store,
+    stores: STORES
+  });
 });
 
 app.get("/api/watchlist", async (_req, res, next) => {
@@ -166,6 +157,9 @@ app.post("/api/watchlist", async (req, res, next) => {
 
   if (!info) return res.status(400).json({ error: "Enter a valid public http or https product URL." });
   if (!title) return res.status(400).json({ error: "Give this product a name so you can recognise it." });
+  if (containsRestrictedCatalogContent(title)) {
+    return res.status(400).json({ error: "This product category isn't supported by DropRadar." });
+  }
   if (target !== null && (!Number.isFinite(target) || target <= 0)) {
     return res.status(400).json({ error: "Target price must be a positive number." });
   }
@@ -190,9 +184,7 @@ app.post("/api/watchlist", async (req, res, next) => {
     return res.status(201).json({
       item,
       tracking: false,
-      note: info.supported
-        ? "Saved. Live price tracking for this retailer still needs an approved data integration."
-        : "Saved as a link. This retailer is not yet verified for price tracking."
+      note: "Saved to your watchlist. Automatic price checks and alerts will activate after a verified retailer data source is connected."
     });
   } catch (error) {
     if (error.code === "23505" || error.code === "SQLITE_CONSTRAINT_UNIQUE") {
@@ -200,6 +192,38 @@ app.post("/api/watchlist", async (req, res, next) => {
     }
     return next(error);
   }
+});
+
+app.patch("/api/watchlist/:id", async (req, res, next) => {
+  const id = String(req.params.id);
+  if (!/^\d+$/.test(id)) return res.status(404).json({ error: "Item not found." });
+
+  const rawTarget = req.body.targetPrice;
+  const target = rawTarget === "" || rawTarget == null ? null : Number(rawTarget);
+  if (target !== null && (!Number.isFinite(target) || target <= 0)) {
+    return res.status(400).json({ error: "Target price must be a positive number." });
+  }
+
+  try {
+    let item;
+    if (pool) {
+      const result = await pool.query(
+        "UPDATE watchlist SET target_price = $1 WHERE id = $2 " +
+        "RETURNING id::text AS id, url, title, merchant, target_price::float8 AS target_price, created_at",
+        [target, id]
+      );
+      item = result.rows[0];
+    } else {
+      const result = sqlite.prepare("UPDATE watchlist SET target_price = ? WHERE id = ?")
+        .run(target, Number(id));
+      if (!result.changes) return res.status(404).json({ error: "Item not found." });
+      item = sqlite.prepare(
+        "SELECT id, url, title, merchant, target_price, created_at FROM watchlist WHERE id = ?"
+      ).get(Number(id));
+    }
+    if (!item) return res.status(404).json({ error: "Item not found." });
+    return res.json({ item });
+  } catch (error) { return next(error); }
 });
 
 app.delete("/api/watchlist/:id", async (req, res, next) => {

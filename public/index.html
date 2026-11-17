@@ -10,17 +10,29 @@
 <header class="topbar">
   <a class="brand" href="/" aria-label="DropRadar home"><span class="brand-mark">D</span><span>drop<span class="brand-accent">radar</span></span></a>
   <nav><a href="#discover" class="nav-link active">Discover</a><a href="#watchlist" class="nav-link">My watchlist</a></nav>
-  <button class="avatar" aria-label="Account">M</button>
+  <span class="avatar" aria-label="DropRadar">D</span>
 </header>
 <main>
   <section class="hero" id="discover">
     <div class="eyebrow"><span class="pulse"></span> YOUR SMARTER WAY TO SHOP</div>
     <h1>Good finds.<br><span>Better timing.</span></h1>
-    <p class="hero-copy">Find what you love, keep an eye on prices, and shop when it makes sense.</p>
+    <p class="hero-copy">Find what you love, compare store offers, and keep an eye on prices.</p>
     <div class="search-wrap">
       <span class="search-icon">⌕</span>
       <input id="searchInput" type="search" placeholder="Search products, brands or describe what you need…" autocomplete="off">
       <button id="searchButton" class="primary-btn">Search <span>→</span></button>
+    </div>
+    <div class="store-filter-shell" aria-label="Filter results by store">
+      <div class="store-filters" id="storeFilters" role="group" aria-label="Store filters">
+        <button class="store-pill active" data-store="all" aria-pressed="true">Best From All Stores</button>
+        <button class="store-pill" data-store="amazon" aria-pressed="false">Amazon</button>
+        <button class="store-pill" data-store="flipkart" aria-pressed="false">Flipkart</button>
+        <button class="store-pill" data-store="myntra" aria-pressed="false">Myntra</button>
+        <button class="store-pill" data-store="croma" aria-pressed="false">Croma</button>
+        <button class="store-pill" data-store="ajio" aria-pressed="false">AJIO</button>
+        <button class="store-pill" data-store="tatacliq" aria-pressed="false">Tata CLiQ</button>
+      </div>
+      <p class="filter-caption">Filter by store · Verified listings appear when a store data feed is connected</p>
     </div>
     <div class="quick-links"><span>Try searching</span><button data-query="wireless headphones">Wireless headphones</button><button data-query="running shoes">Running shoes</button><button data-query="smartwatch">Smartwatch</button></div>
     <div id="searchNotice" class="notice hidden" role="status"></div>
@@ -33,7 +45,7 @@
   <section class="feature-grid">
     <article class="feature-card"><div class="feature-icon lilac">⌕</div><h3>Discover</h3><p>Search for products and find relevant options in one place.</p></article>
     <article class="feature-card"><div class="feature-icon mint">⇄</div><h3>Compare</h3><p>Understand prices and product differences before deciding.</p></article>
-    <article class="feature-card"><div class="feature-icon peach">↘</div><h3>Track</h3><p>Save a product and set the price you'd be happy to pay.</p></article>
+    <article class="feature-card"><div class="feature-icon peach">↘</div><h3>Track</h3><p>Save products and set the price you'd be happy to pay.</p></article>
   </section>
   <section class="section watch-section" id="watchlist">
     <div class="section-heading"><div><div class="eyebrow muted">YOUR SHORTLIST</div><h2>Things to keep an eye on</h2></div><button id="refreshButton" class="text-btn">Refresh ↻</button></div>
@@ -48,7 +60,7 @@
       </form>
     </div>
     <div id="watchlistItems" class="watchlist"><div class="empty-state"><div class="empty-icon">♡</div><strong>Your watchlist starts here</strong><p>Save a product link and set a target price to keep your shortlist organised.</p></div></div>
-    <p class="fine-print">Saving a link does not mean its price is being monitored yet. Live tracking starts only when an approved retailer data connection is available.</p>
+    <p class="fine-print">Saved products are organised here. Automatic price checks and drop alerts will start after a verified store data source and monitor are connected.</p>
   </section>
 </main>
 <footer><a class="brand small-brand" href="/"><span class="brand-mark">D</span><span>drop<span class="brand-accent">radar</span></span></a><span>Discover. Compare. Track. Shop.</span><span>Built for better decisions.</span></footer>
