@@ -38,6 +38,7 @@ function safeHttpUrl(value) {
   } catch { return null; }
 }
 function formatMoney(value, currency = "INR") {
+  if (value === null || value === undefined || value === "") return "Price unavailable";
   const amount = Number(value);
   if (!Number.isFinite(amount)) return "Price unavailable";
   try {
