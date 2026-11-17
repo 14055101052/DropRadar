@@ -7,6 +7,8 @@ const form = $("#addForm");
 const list = $("#watchlistItems");
 const toast = $("#toast");
 let toastTimer;
+let currentSearchItems = [];
+const compareSelection = new Set();
 
 function notify(message) {
   toast.textContent = message;
@@ -63,7 +65,9 @@ function renderSearchResults(data) {
     ? " · Checked " + fetchedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "";
 
-  const cards = items.map((item) => {
+  currentSearchItems = items;
+  compareSelection.clear();
+  const cards = items.map((item, index) => {
     const title = escapeHtml(item.title);
     const brand = escapeHtml(item.brand || "Product");
     const imageUrl = safeHttpUrl(item.imageUrl);
@@ -97,6 +101,7 @@ function renderSearchResults(data) {
         '</div>' + stock +
         (specs ? '<div class="product-specs">' + specs + '</div>' : '') +
         '<div class="product-actions">' +
+          '<button class="compare-product" data-compare="' + index + '">＋ Compare</button>' +
           '<button class="secondary-btn save-product" data-title="' + escapeHtml(item.title) +
             '" data-url="' + escapeHtml(productUrl || "") + '"' + (productUrl ? "" : " disabled") + '>＋ Save</button>' +
           (productUrl ? '<a class="retailer-link" href="' + escapeHtml(productUrl) +
@@ -111,11 +116,93 @@ function renderSearchResults(data) {
     escapeHtml(data.provider || "verified retailer") + timestamp +
     '</span></div><span class="source-label">Retailer data</span></div>' +
     '<div class="product-grid">' + cards + '</div>' +
+    '<div id="compareTray" class="compare-tray hidden"></div>' +
     '<p class="results-disclaimer">Product information is provided by the retailer and may change. Confirm the final price, delivery and availability on the store website.</p>';
 
   searchResults.classList.remove("hidden");
   searchResults.querySelectorAll(".save-product").forEach((button) => {
     button.addEventListener("click", () => saveProduct(button));
+  });
+  searchResults.querySelectorAll("[data-compare]").forEach((button) => {
+    button.addEventListener("click", () => toggleCompare(button));
+  });
+  renderCompareTray();
+}
+
+
+function toggleCompare(button) {
+  const index = Number(button.dataset.compare);
+  if (!Number.isInteger(index) || !currentSearchItems[index]) return;
+
+  if (compareSelection.has(index)) {
+    compareSelection.delete(index);
+    button.textContent = "＋ Compare";
+    button.classList.remove("selected");
+  } else {
+    if (compareSelection.size >= 3) {
+      notify("Compare up to 3 products at a time.");
+      return;
+    }
+    compareSelection.add(index);
+    button.textContent = "✓ Added";
+    button.classList.add("selected");
+  }
+  renderCompareTray();
+}
+
+function renderCompareTray() {
+  const tray = $("#compareTray");
+  if (!tray) return;
+  const indexes = Array.from(compareSelection);
+  if (indexes.length < 2) {
+    tray.classList.add("hidden");
+    tray.innerHTML = "";
+    return;
+  }
+
+  tray.classList.remove("hidden");
+  tray.innerHTML =
+    '<div class="compare-bar"><div><strong>' + indexes.length +
+      ' products selected</strong><span>Compare price and key details side by side.</span></div>' +
+    '<div class="compare-controls"><button id="showCompare" class="primary-btn">Compare now</button>' +
+    '<button id="clearCompare" class="text-btn">Clear</button></div></div>' +
+    '<div id="comparePanel" class="compare-panel hidden"></div>';
+
+  $("#showCompare").addEventListener("click", () => {
+    const products = indexes.map((index) => currentSearchItems[index]);
+    const labels = ["Brand", "Price", "MRP", "Discount", "Availability", "Key specifications"];
+    const values = [
+      (item) => escapeHtml(item.brand || "Not provided"),
+      (item) => escapeHtml(formatMoney(item.price, item.currency || "INR")),
+      (item) => Number(item.mrp) > 0 ? escapeHtml(formatMoney(item.mrp, item.currency || "INR")) : "Not provided",
+      (item) => Number(item.discountPercentage) > 0 ? Math.round(Number(item.discountPercentage)) + "% off" : "Not provided",
+      (item) => item.inStock === true ? "In stock" : item.inStock === false ? "Out of stock" : "Not confirmed",
+      (item) => Array.isArray(item.keySpecs) && item.keySpecs.length
+        ? item.keySpecs.slice(0, 4).map(escapeHtml).join("<br>")
+        : "Not provided"
+    ];
+    const header = '<tr><th>Details</th>' + products.map((item) =>
+      '<th>' + escapeHtml(item.title) + '</th>'
+    ).join("") + '</tr>';
+    const body = labels.map((label, rowIndex) =>
+      '<tr><th>' + label + '</th>' + products.map((item) =>
+        '<td>' + values[rowIndex](item) + '</td>'
+      ).join("") + '</tr>'
+    ).join("");
+    const panel = $("#comparePanel");
+    panel.innerHTML = '<div class="comparison-scroll"><table class="comparison-table">' +
+      '<thead>' + header + '</thead><tbody>' + body + '</tbody></table></div>' +
+      '<p class="compare-note">This comparison uses fields returned by Flipkart. Missing fields are shown as not provided.</p>';
+    panel.classList.remove("hidden");
+  });
+
+  $("#clearCompare").addEventListener("click", () => {
+    compareSelection.clear();
+    searchResults.querySelectorAll("[data-compare]").forEach((button) => {
+      button.textContent = "＋ Compare";
+      button.classList.remove("selected");
+    });
+    renderCompareTray();
   });
 }
 
