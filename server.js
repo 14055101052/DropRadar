@@ -16,8 +16,11 @@ const pool = DATABASE_URL
     })
   : null;
 
-// Local SQLite keeps development usable. On Render Free this filesystem is not durable;
-// configure DATABASE_URL to use hosted PostgreSQL before storing real user data.
+if (pool) {
+  pool.on("error", (error) => console.error("PostgreSQL pool error:", error.message));
+}
+
+// Local SQLite is for development only. Render Free does not preserve local filesystem data.
 const sqlite = pool ? null : new Database(process.env.DB_PATH || path.join(__dirname, "dropradar.db"));
 
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -29,7 +32,7 @@ function identifyMerchant(raw) {
   try { url = new URL(raw); } catch { return null; }
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return null;
 
-  const host = url.hostname.toLowerCase().replace(/^www\\./, "");
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
   const known = [
     ["amazon.in", "Amazon India"], ["amazon.com", "Amazon"],
     ["flipkart.com", "Flipkart"], ["myntra.com", "Myntra"],
@@ -54,16 +57,16 @@ async function initializeStorage() {
     await pool.query("SELECT 1");
   } else {
     sqlite.pragma("journal_mode = WAL");
-    sqlite.exec(\`
-      CREATE TABLE IF NOT EXISTS watchlist (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        url TEXT NOT NULL UNIQUE,
-        title TEXT NOT NULL,
-        merchant TEXT NOT NULL,
-        target_price REAL,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-    \`);
+    sqlite.exec([
+      "CREATE TABLE IF NOT EXISTS watchlist (",
+      "id INTEGER PRIMARY KEY AUTOINCREMENT,",
+      "url TEXT NOT NULL UNIQUE,",
+      "title TEXT NOT NULL,",
+      "merchant TEXT NOT NULL,",
+      "target_price REAL,",
+      "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+      ")"
+    ].join(" "));
   }
 }
 
@@ -151,7 +154,7 @@ app.post("/api/watchlist", async (req, res, next) => {
 
 app.delete("/api/watchlist/:id", async (req, res, next) => {
   const id = String(req.params.id);
-  if (!/^\\d+$/.test(id)) return res.status(404).json({ error: "Item not found." });
+  if (!/^\d+$/.test(id)) return res.status(404).json({ error: "Item not found." });
   try {
     let deleted;
     if (pool) {
