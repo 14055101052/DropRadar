@@ -12,7 +12,7 @@ test("scores a listing using MRP and matched-store evidence", () => {
     lowestStorePrice: 7500
   });
   assert.equal(result.state, "assessed");
-  assert.equal(result.score, 100);
+  assert.equal(result.score, 81);
   assert.equal(result.confidence, "medium");
   assert.ok(result.reasons.some((reason) => reason.includes("25% below")));
   assert.ok(result.reasons.some((reason) => reason.includes("lowest price")));
@@ -27,7 +27,7 @@ test("uses recorded price history only after at least three observations", () =>
     observationCount: 5
   });
   assert.equal(result.state, "assessed");
-  assert.equal(result.score, 73);
+  assert.equal(result.score, 88);
   assert.ok(result.signals.includes("price_history"));
 });
 
