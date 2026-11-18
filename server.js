@@ -336,6 +336,7 @@ app.get("/api/watchlist", requireUser, async (req, res, next) => {
 });
 
 app.post("/api/watchlist", requireUser, async (req, res, next) => {
+  if (!checkSameOrigin(req,res)) return;
   const title = String(req.body.title || "").trim().slice(0, 140);
   const info = identifyMerchant(String(req.body.url || "").trim());
   const rawTarget = req.body.targetPrice;
@@ -398,6 +399,7 @@ app.post("/api/watchlist", requireUser, async (req, res, next) => {
 });
 
 app.patch("/api/watchlist/:id", requireUser, async (req, res, next) => {
+  if (!checkSameOrigin(req,res)) return;
   const id = String(req.params.id);
   if (!/^\d+$/.test(id)) return res.status(404).json({ error: "Item not found." });
 
@@ -430,6 +432,7 @@ app.patch("/api/watchlist/:id", requireUser, async (req, res, next) => {
 });
 
 app.delete("/api/watchlist/:id", requireUser, async (req, res, next) => {
+  if (!checkSameOrigin(req,res)) return;
   const id = String(req.params.id);
   if (!/^\d+$/.test(id)) return res.status(404).json({ error: "Item not found." });
   try {
