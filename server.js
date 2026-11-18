@@ -133,19 +133,43 @@ app.post("/api/internal/catalog/ingest", async (req, res, next) => {
   }
 });
 
+app.get("/api/catalog/offers/:offerId/history", async (req, res, next) => {
+  const offerId = String(req.params.offerId || "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(offerId)) {
+    return res.status(404).json({ error: "Offer not found." });
+  }
+  try {
+    if (pool) {
+      const offer = await pool.query("SELECT id FROM store_offers WHERE id=$1", [offerId]);
+      if (!offer.rowCount) return res.status(404).json({ error: "Offer not found." });
+      const result = await pool.query(
+        "SELECT price::float8 AS price,currency,availability,observed_at FROM price_observations WHERE offer_id=$1 ORDER BY observed_at DESC LIMIT 90",
+        [offerId]
+      );
+      return res.json({ offerId, observations: result.rows.reverse() });
+    }
+    const offer = sqlite.prepare("SELECT id FROM store_offers WHERE id=?").get(offerId);
+    if (!offer) return res.status(404).json({ error: "Offer not found." });
+    const observations = sqlite.prepare(
+      "SELECT price,currency,availability,observed_at FROM price_observations WHERE offer_id=? ORDER BY observed_at DESC LIMIT 90"
+    ).all(offerId).reverse();
+    return res.json({ offerId, observations });
+  } catch (error) { return next(error); }
+});
+
 app.get("/api/watchlist", async (_req, res, next) => {
   try {
     if (pool) {
       const result = await pool.query(
         "SELECT w.id::text AS id,w.url,w.title,w.merchant,w.target_price::float8 AS target_price,w.created_at," +
-        "w.catalog_product_id::text AS product_id,w.store_offer_id::text AS offer_id,o.price::float8 AS current_price,o.currency,o.availability " +
+        "w.catalog_product_id::text AS product_id,w.store_offer_id::text AS offer_id,o.price::float8 AS current_price,o.currency,o.availability,o.last_seen_at AS price_seen_at " +
         "FROM watchlist w LEFT JOIN store_offers o ON o.id=w.store_offer_id ORDER BY w.id DESC"
       );
       return res.json({ items: result.rows });
     }
     const rows = sqlite.prepare(
       "SELECT w.id,w.url,w.title,w.merchant,w.target_price,w.created_at,w.catalog_product_id AS product_id," +
-      "w.store_offer_id AS offer_id,o.price AS current_price,o.currency,o.availability " +
+      "w.store_offer_id AS offer_id,o.price AS current_price,o.currency,o.availability,o.last_seen_at AS price_seen_at " +
       "FROM watchlist w LEFT JOIN store_offers o ON o.id=w.store_offer_id ORDER BY w.id DESC"
     ).all();
     return res.json({ items: rows });
