@@ -4,7 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#f7f8fa"><meta name="description" content="Discover smarter. Compare better. Track what matters.">
   <link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/retailer-browser.css"><title>DropRadar — Shop smarter</title>
+  <link rel="stylesheet" href="/styles.css"><title>DropRadar — Shop smarter</title>
 </head>
 <body>
 <header class="topbar">
@@ -34,32 +34,7 @@
       </div>
       <p class="filter-caption">Filter by store · Verified listings appear when a store data feed is connected</p>
     </div>
-    <section class="retailer-browser" id="retailerBrowser" aria-label="Browse retailer websites inside DropRadar">
-      <div class="retailer-browser-head">
-        <div><div class="eyebrow muted">ONE APP, MULTIPLE STORES</div><h2>Browse stores inside DropRadar</h2><p>Choose a retailer and search. If its website allows embedding, it will appear here.</p></div>
-      </div>
-      <div class="retailer-browser-controls">
-        <input id="retailerSearch" type="search" placeholder="What are you looking for? (e.g. headphones)" autocomplete="off">
-        <button id="retailerGo" class="primary-btn" type="button">Search store →</button>
-      </div>
-      <div class="retailer-browser-stores" role="group" aria-label="Choose retailer">
-        <button type="button" data-retailer="amazon" aria-pressed="false">Amazon</button>
-        <button type="button" data-retailer="flipkart" aria-pressed="false">Flipkart</button>
-        <button type="button" data-retailer="myntra" aria-pressed="false">Myntra</button>
-        <button type="button" data-retailer="croma" aria-pressed="false">Croma</button>
-        <button type="button" data-retailer="ajio" aria-pressed="false">AJIO</button>
-        <button type="button" data-retailer="tatacliq" aria-pressed="false">Tata CLiQ</button>
-      </div>
-      <p class="retailer-browser-status" id="retailerBrowserStatus" role="status">Choose a store, enter a product, and try browsing without leaving DropRadar.</p>
-      <div class="retailer-browser-frame-wrap">
-        <iframe class="retailer-browser-frame" id="retailerFrame" title="Retailer website" loading="lazy"></iframe>
-      </div>
-      <div class="retailer-browser-actions">
-        <a id="retailerExternalLink" href="https://www.amazon.in/" target="_blank" rel="noopener noreferrer">Open retailer outside DropRadar ↗</a>
-        <button class="retailer-browser-close" id="retailerClose" type="button">Close browser</button>
-      </div>
-    </section>
-    <div class="quick-links"><span>Try searching</span><button data-query="wireless headphones">Wireless headphones</button><button data-query="running shoes">Running shoes</button><button data-query="smartwatch">Smartwatch</button></div>
+<div class="quick-links"><span>Try searching</span><button data-query="wireless headphones">Wireless headphones</button><button data-query="running shoes">Running shoes</button><button data-query="smartwatch">Smartwatch</button></div>
     <div id="searchNotice" class="notice hidden" role="status"></div>
     <div id="searchResults" class="search-results hidden" aria-live="polite"></div>
   </section>
@@ -90,5 +65,5 @@
 </main>
 <footer><a class="brand small-brand" href="/"><span class="brand-mark">D</span><span>drop<span class="brand-accent">radar</span></span></a><span>Discover. Compare. Track. Shop.</span><span>Built for better decisions.</span></footer>
 <div id="toast" class="toast" role="status"></div>
-<script src="/app.js"></script><script src="/retailer-browser.js"></script>
+<script src="/app.js"></script>
 </body></html>
