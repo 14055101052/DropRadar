@@ -117,8 +117,12 @@ async function markProviderError(storage, providerId, displayName, error) {
   ).run(providerId,displayName,message);
 }
 async function providerStatuses(storage) {
-  return storage.pool
+  const rows = storage.pool
     ? (await storage.pool.query("SELECT provider_id AS id,display_name AS name,status,last_success_at,last_error FROM provider_status ORDER BY display_name")).rows
     : storage.sqlite.prepare("SELECT provider_id AS id,display_name AS name,status,last_success_at,last_error FROM provider_status ORDER BY display_name").all();
+  if (!rows.some((provider) => provider.id === "flipkart-affiliate-api")) {
+    rows.push({ id: "flipkart-affiliate-api", name: "Flipkart Affiliate API", status: "not_connected", last_success_at: null, last_error: null });
+  }
+  return rows;
 }
 module.exports={ingestOffer,searchCatalog,providerStatuses,markProviderError,validate};
