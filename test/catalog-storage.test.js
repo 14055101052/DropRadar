@@ -51,6 +51,26 @@ test("SQLite migrations, catalogue upsert, search and price history work togethe
       "SELECT price FROM price_observations WHERE offer_id=? ORDER BY id"
     ).all(first.offerId);
     assert.deepEqual(observations.map((row) => row.price), [24999, 23999]);
+    const otherStore = await ingestOffer(storage, {
+      title: "Sony WH-1000XM5 Wireless Headphones",
+      brand: "Sony",
+      model: "WH-1000XM5",
+      retailerId: "amazon",
+      retailerSku: "B0TESTXM5",
+      providerId: "test-amazon",
+      productUrl: "https://www.amazon.in/dp/B0TESTXM5",
+      price: 22999,
+      mrp: 29990,
+      currency: "INR",
+      availability: "in_stock"
+    });
+    assert.equal(otherStore.productId, first.productId, "same exact brand/model/title must share one canonical product");
+    assert.notEqual(otherStore.offerId, first.offerId, "each retailer offer must remain independent");
+    const crossStoreResults = await searchCatalog(storage, "Sony WH-1000XM5", "all");
+    assert.equal(crossStoreResults.length, 2);
+    assert.equal(new Set(crossStoreResults.map((row) => row.productId)).size, 1);
+    assert.deepEqual(new Set(crossStoreResults.map((row) => row.merchant)), new Set(["Flipkart", "Amazon"]));
+    assert.ok(crossStoreResults.every((row) => row.lastSeenAt), "comparison must show when each feed last updated");
 
     const userA = "11111111-1111-4111-8111-111111111111";
     const userB = "22222222-2222-4222-8222-222222222222";
