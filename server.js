@@ -4,6 +4,8 @@ const path = require("path");
 const Database = require("better-sqlite3");
 const { Pool } = require("pg");
 const { migrateStorage } = require("./db/migrations");
+const crypto = require("crypto");
+const { ingestOffer, searchCatalog, providerStatuses } = require("./db/catalog");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -76,7 +78,7 @@ app.get("/api/health", async (_req, res, next) => {
       service: "DropRadar",
       version: "0.3.0",
       storage: pool ? "hosted-postgresql" : "local-sqlite-temporary",
-      productSearch: "no-live-store-provider-connected",
+      productSearch: "verified-catalogue-only",
       affiliateLinks: false
     });
   } catch (error) { next(error); }
@@ -86,29 +88,49 @@ app.get("/api/stores", (_req, res) => {
   res.json({ stores: STORES });
 });
 
-app.get("/api/search", (req, res) => {
+app.get("/api/search", async (req, res, next) => {
   const q = String(req.query.q || "").trim().slice(0, 100);
   const store = String(req.query.store || "all").trim().toLowerCase();
   if (q.length < 2) return res.status(400).json({ error: "Enter at least 2 characters." });
   if (containsRestrictedCatalogContent(q)) {
-    return res.status(400).json({
-      code: "CATEGORY_NOT_SUPPORTED",
-      message: "This product category isn't supported by DropRadar."
-    });
+    return res.status(400).json({ code: "CATEGORY_NOT_SUPPORTED", message: "This product category isn't supported by DropRadar." });
   }
   if (store !== "all" && !STORES.some((item) => item.id === store)) {
     return res.status(400).json({ error: "Choose a store from the available filters." });
   }
+  try {
+    const items = await searchCatalog({ pool, sqlite }, q, store);
+    return res.json({ items, query: q, selectedStore: store, source: "verified_catalogue" });
+  } catch (error) { return next(error); }
+});
 
-  // No retailer feed is connected yet. Never return sample or fabricated offers
-  // as if they were current retailer prices.
-  return res.status(503).json({
-    code: "PRODUCT_DATA_SOURCES_NOT_CONNECTED",
-    message: "Live product listings aren't connected yet. DropRadar won't invent prices, ratings, delivery estimates or return policies.",
-    query: q,
-    selectedStore: store,
-    stores: STORES
-  });
+app.get("/api/providers", async (_req, res, next) => {
+  try {
+    const providers = await providerStatuses({ pool, sqlite });
+    return res.json({ providers });
+  } catch (error) { return next(error); }
+});
+
+// Private ingestion endpoint for a future approved retailer adapter. It remains
+// disabled until PRODUCT_INGESTION_SECRET is configured on the server.
+app.post("/api/internal/catalog/ingest", async (req, res, next) => {
+  const expected = process.env.PRODUCT_INGESTION_SECRET || "";
+  const supplied = String(req.get("x-product-ingestion-secret") || "");
+  if (!expected) return res.status(503).json({ error: "Catalogue ingestion is not configured." });
+  const expectedBuffer = Buffer.from(expected);
+  const suppliedBuffer = Buffer.from(supplied);
+  if (expectedBuffer.length !== suppliedBuffer.length || !crypto.timingSafeEqual(expectedBuffer, suppliedBuffer)) {
+    return res.status(401).json({ error: "Unauthorised." });
+  }
+  if (containsRestrictedCatalogContent(req.body.title) || containsRestrictedCatalogContent(req.body.category)) {
+    return res.status(400).json({ error: "This product category isn't supported by DropRadar." });
+  }
+  try {
+    const result = await ingestOffer({ pool, sqlite }, req.body);
+    return res.status(201).json({ ok: true, ...result });
+  } catch (error) {
+    return res.status(400).json({ error: error.message || "Offer could not be ingested." });
+  }
 });
 
 app.get("/api/watchlist", async (_req, res, next) => {
