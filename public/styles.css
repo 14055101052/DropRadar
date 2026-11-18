@@ -9,3 +9,40 @@ main{max-width:1120px;margin:auto;padding:0 28px}.hero{text-align:center;padding
 
 .account-panel{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:17px 19px;margin:0 0 15px;background:#fff;border:1px solid #ecebf3;border-radius:15px}.account-copy{display:grid;gap:5px;min-width:0}.account-copy strong{font-size:12px;color:#282936}.account-copy p{font-size:10px;color:#858793;line-height:1.55;margin:0}.account-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.account-form input{width:180px;max-width:100%;padding:10px 11px;border:1px solid #e5e5ed;border-radius:9px;background:#fff;font:inherit;font-size:11px;outline:none}.account-form input:focus{border-color:#8176e8;box-shadow:0 0 0 3px #8176e81a}.account-form .primary-btn{padding:10px 14px;font-size:10px}.account-actions{display:flex;align-items:center;gap:10px}.account-email{font-size:11px;color:#55566a;font-weight:650}.account-loading{font-size:11px;color:#898a96}.account-toggle{border:0;background:transparent;color:#6558e8;font:inherit;font-size:10px;font-weight:700;cursor:pointer;padding:7px}.account-error{width:100%;font-size:10px;color:#b33b48;margin:0}.account-note{font-size:9px;color:#9697a1;line-height:1.5;width:100%;margin:0}
 @media(max-width:700px){.account-panel{align-items:stretch;flex-direction:column;padding:14px}.account-form{display:grid;grid-template-columns:1fr}.account-form input{width:100%}.account-form .primary-btn{width:100%}.account-actions{justify-content:space-between}.account-copy p{max-width:none}}
+
+
+/* Same-product retailer comparison */
+.comparison-product-list{display:grid;gap:16px;text-align:left}
+.comparison-product-card{background:#fff;border:1px solid #e9e9f0;border-radius:17px;padding:17px;box-shadow:0 8px 24px #25204408}
+.comparison-product-summary{display:flex;align-items:center;gap:15px;min-width:0}
+.comparison-product-summary .product-image{width:104px;height:112px;flex:0 0 104px}
+.comparison-product-info{min-width:0;display:grid;justify-items:start;gap:6px}
+.comparison-product-info h3{font-size:14px;line-height:1.45;margin:0;color:#292a34}
+.product-model{font-size:10px;color:#777985}
+.offer-count{font-size:10px;color:#777985}
+.comparison-verdict{display:grid;gap:5px;margin:15px 0 10px;padding:12px 14px;border-radius:11px;background:#f6f5ff;border:1px solid #ebe8ff}
+.comparison-verdict>span{font-size:8px;letter-spacing:1.2px;font-weight:800;color:#7166d9}
+.comparison-verdict strong{font-size:11px;line-height:1.55;color:#393650}
+.offer-list{display:grid;border-top:1px solid #efeff3}
+.offer-row{display:grid;grid-template-columns:minmax(125px,1.1fr) minmax(115px,.8fr) minmax(95px,.6fr) auto;align-items:center;gap:12px;padding:13px 2px;border-bottom:1px solid #f0f0f3}
+.offer-store,.offer-price{display:grid;justify-items:start;gap:4px;min-width:0}
+.offer-store strong{font-size:11px;color:#373844}
+.offer-store span{font-size:9px;color:#9698a2;line-height:1.4}
+.offer-price>strong{font-size:13px;color:#292a34}
+.offer-price .mrp{font-size:9px}
+.offer-price .discount{font-size:8px}
+.offer-stock .stock-status{margin:0}
+.offer-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.offer-actions .buy-now,.offer-actions .track-product{font-size:9px;padding:8px 9px}
+.comparison-note{font-size:9px;line-height:1.55;color:#9698a2;margin:11px 2px 0}
+@media(max-width:700px){
+ .comparison-product-card{padding:12px}
+ .comparison-product-summary .product-image{width:82px;height:94px;flex-basis:82px}
+ .comparison-product-info h3{font-size:12px}
+ .offer-row{grid-template-columns:1fr auto;gap:8px;padding:12px 0}
+ .offer-store{grid-column:1}
+ .offer-price{grid-column:1;grid-row:2}
+ .offer-stock{grid-column:2;grid-row:1;justify-self:end}
+ .offer-actions{grid-column:2;grid-row:2;align-self:center}
+ .offer-actions .buy-now,.offer-actions .track-product{font-size:8px;padding:7px 8px}
+}
