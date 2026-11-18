@@ -152,6 +152,23 @@ const MIGRATIONS = [
       "CREATE INDEX IF NOT EXISTS idx_watchlist_catalog_product ON watchlist (catalog_product_id)",
       "CREATE INDEX IF NOT EXISTS idx_watchlist_store_offer ON watchlist (store_offer_id)"
     ]
+  },
+  {
+    version: 3,
+    postgres: [
+      `CREATE TABLE IF NOT EXISTS app_users (id UUID PRIMARY KEY,email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+      `CREATE TABLE IF NOT EXISTS user_sessions (token_hash CHAR(64) PRIMARY KEY,user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,expires_at TIMESTAMPTZ NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+      "CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions (user_id)",
+      "ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES app_users(id) ON DELETE CASCADE",
+      "CREATE INDEX IF NOT EXISTS idx_watchlist_user_created ON watchlist (user_id, created_at DESC)"
+    ],
+    sqlite: [
+      `CREATE TABLE IF NOT EXISTS app_users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE COLLATE NOCASE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
+      `CREATE TABLE IF NOT EXISTS user_sessions (token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,expires_at TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
+      "CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions (user_id)",
+      "ALTER TABLE watchlist ADD COLUMN user_id TEXT REFERENCES app_users(id) ON DELETE CASCADE",
+      "CREATE INDEX IF NOT EXISTS idx_watchlist_user_created ON watchlist (user_id, created_at DESC)"
+    ]
   }
 ];
 
