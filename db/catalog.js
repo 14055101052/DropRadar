@@ -101,6 +101,20 @@ async function searchCatalog(storage,q,store) {
   return rows.map(r=>addDiscount({...r,inStock:r.inStock===null?null:Boolean(r.inStock)}));
 }
 function addDiscount(row){const names={amazon:"Amazon",flipkart:"Flipkart",myntra:"Myntra",croma:"Croma",ajio:"AJIO",tatacliq:"Tata CLiQ"};return {...row,merchant:names[row.merchant]||row.merchant,discountPercentage:row.mrp&&row.price&&row.mrp>row.price?Math.round((row.mrp-row.price)/row.mrp*100):null};}
+async function markProviderSuccess(storage, providerId, displayName) {
+  if (storage.pool) {
+    await storage.pool.query(
+      "INSERT INTO provider_status (provider_id,display_name,status,last_success_at,last_error) VALUES ($1,$2,'connected',NOW(),NULL) " +
+      "ON CONFLICT(provider_id) DO UPDATE SET status='connected',last_success_at=NOW(),last_error=NULL,updated_at=NOW()",
+      [providerId,displayName]
+    );
+    return;
+  }
+  storage.sqlite.prepare(
+    "INSERT INTO provider_status (provider_id,display_name,status,last_success_at,last_error) VALUES (?,?,'connected',CURRENT_TIMESTAMP,NULL) " +
+    "ON CONFLICT(provider_id) DO UPDATE SET status='connected',last_success_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP"
+  ).run(providerId,displayName);
+}
 async function markProviderError(storage, providerId, displayName, error) {
   const message = String(error && error.message ? error.message : "Provider request failed").slice(0, 300);
   if (storage.pool) {
@@ -125,4 +139,4 @@ async function providerStatuses(storage) {
   }
   return rows;
 }
-module.exports={ingestOffer,searchCatalog,providerStatuses,markProviderError,validate};
+module.exports={ingestOffer,searchCatalog,providerStatuses,markProviderSuccess,markProviderError,validate};
