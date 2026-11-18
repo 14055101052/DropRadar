@@ -113,7 +113,7 @@ function renderSearchResults() {
       '<div class="results-empty"><div class="results-empty-icon">⌕</div>' +
       '<strong>No verified listings found</strong>' +
       '<p>There are no connected product feeds for ' + escapeHtml(storeName) +
-      ' yet. DropRadar will not fill this space with sample prices.</p></div>';
+      '. DropRadar will not fill this space with sample prices.</p></div>';
     searchResults.classList.remove("hidden");
     return;
   }
