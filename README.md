@@ -1,47 +1,44 @@
 # DropRadar
 
-A responsive shopping-discovery PWA with a Node.js API, product-link watchlist, side-by-side comparison UI, and optional PostgreSQL storage.
+DropRadar is a shopping-discovery and price-intelligence PWA. The intended flow is **discover → compare → evaluate → track → buy**. It combines the original DropRadar link tracker with DealMind-style discovery, deal intelligence and smart recommendations.
 
 ## Run locally
 
 1. Install Node.js 24.22.1.
-2. Run \`npm install\`.
-3. Run \`npm start\`.
+2. Run `npm install`.
+3. Run `npm start`.
 4. Open http://localhost:3000.
 
-Without \`DATABASE_URL\`, local development uses SQLite at \`dropradar.db\`.
-With \`DATABASE_URL\`, the API uses PostgreSQL. Keep connection strings private.
+Without `DATABASE_URL`, local development uses SQLite at `dropradar.db`. With `DATABASE_URL`, the API uses PostgreSQL. Keep connection strings private.
 
-## Current product experience
+## Product experience
 
-- Multi-store filter bar: Best From All Stores, Amazon, Flipkart, Myntra, Croma, AJIO and Tata CLiQ.
-- Best From All Stores sorts verified listings by ascending current price.
-- Product cards support direct retailer links and one-tap watchlist saving.
-- Selecting one to three listings opens a side-by-side comparison table.
-- Comparison fields include store, current price, delivery estimate, seller rating and return policy.
-- Missing fields are shown as "Not supplied"; no store detail is guessed.
-- The buying verdict is currently a transparent price comparison rule, not an AI-generated recommendation.
-- Watchlist items allow target-price editing.
-- Server-side category safety checks apply to search and saved item titles.
-- PostgreSQL setup is optional; local SQLite is available for development.
+- One search entry point for product discovery across connected stores.
+- Store filters for Amazon, Flipkart, Myntra, Croma, AJIO and Tata CLiQ.
+- Product cards support verified product details, retailer links and watchlist saving when a data provider is connected.
+- Select up to three listings for side-by-side comparison.
+- Compare only supplied fields; missing delivery, seller and returns data is never guessed.
+- Paste a product URL into the watchlist and optionally set a target price.
 - PWA manifest and service-worker shell caching.
-- API health at \`/api/health\` and store metadata at \`/api/stores\`.
 
-## Product data integrations
+The embedded retailer browser was removed. DropRadar is intended to show product listings and comparisons in its own experience; Buy Now hands the user to the retailer's own app or website.
+
+## Product data and affiliate integrations
 
 There are currently **no live retailer product feeds connected**. The search endpoint returns an explicit unavailable response rather than sample listings or fabricated prices.
 
-No affiliate tracking is used. Buy Now opens the exact retailer product URL supplied by a connected data source, without adding an affiliate tag.
+An Amazon Associates tracking ID is a link-attribution ID; it does not by itself grant programmatic access to Amazon's product catalogue. Amazon's current Creators API is the successor to PA-API 5. Its published prerequisites include enrolment in the target marketplace, at least 10 qualifying sales in the previous 30 days, API registration and API credentials. See the [Amazon Creators API prerequisites](https://affiliate-program.amazon.in/creatorsapi/docs/en-us/introduction).
 
-Amazon's current product catalog API requires an Amazon Associates account and API eligibility. Flipkart's product search API is limited to registered Flipkart Affiliate Program users. Those integrations are therefore not part of the current no-commission build.
+Cuelinks provides affiliate campaign discovery, offer/coupon data, link conversion and reporting. Its support documentation explicitly says its API does **not** provide merchant product feeds. It therefore cannot, by itself, power keyword-based product catalogue search. See [Cuelinks API documentation](https://developers.cuelinks.com/docs/) and [Cuelinks feed clarification](https://cuelinks.zohodesk.com/portal/en/kb/articles/what-are-the-different-types-of-apis-available).
 
-Before connecting another data provider, verify its store coverage, free-tier limits, data freshness, permitted use, and whether it returns direct retailer URLs. Do not scrape or bypass store protections. Store fields such as delivery estimates, seller ratings and returns must only be shown when supplied by a verified source.
+Affiliate link attribution and product catalogue data are separate integrations. DropRadar must only display current product data supplied by an approved, terms-compliant source. Do not scrape retailer pages or bypass store protections.
 
 ## Current limitations
 
-- Search UI is ready, but live product search waits for a non-affiliate, terms-compliant provider.
-- Automatic price monitoring, price history and price-drop notifications are not implemented.
-- Watchlist saves links and optional target prices; this is not yet automatic monitoring.
-- SQLite fallback on Render Free is temporary: local filesystem data can disappear across deploys or restarts.
+- Search UI and comparison UI are present, but live product search is waiting for an eligible data provider.
+- Amazon product catalogue integration is not active; the Associates ID alone is not sufficient.
+- Automatic price monitoring, price history and price-drop/restock notifications are not implemented.
+- Watchlist currently saves product links and optional target prices; it does not automatically monitor prices.
+- SQLite fallback on Render Free is temporary; local filesystem data can disappear across deploys or restarts.
 - No user authentication or multi-user isolation has been implemented. Treat this deployment as a private development build, not a public production shopping service.
-- The smart verdict only compares supplied prices. It does not score seller reliability or generate an AI recommendation.
+- The current comparison verdict is a transparent price rule, not an AI-generated recommendation.
