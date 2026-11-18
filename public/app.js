@@ -428,7 +428,7 @@ function renderAccount() {
       '<input name="password" type="password" autocomplete="' + (authMode === "signup" ? "new-password" : "current-password") + '" minlength="10" maxlength="128" required placeholder="Password (10+ characters)" aria-label="Password">' +
       '<button class="primary-btn" type="submit">' + (authMode === "signup" ? "Create account" : "Sign in") + '</button>' +
       '<button class="account-toggle" id="authModeToggle" type="button">' + (authMode === "signup" ? "Already registered? Sign in" : "New to DropRadar? Create account") + '</button>' +
-      '<p class="account-note">Your password is stored as a one-way scrypt hash. Use a unique password you don't use elsewhere.</p>' +
+      '<p class="account-note">Your password is stored as a one-way scrypt hash. Use a unique password that you do not reuse elsewhere.</p>' +
       '<p id="authError" class="account-error" role="alert"></p></form>';
     $("#authModeToggle").addEventListener("click", () => {
       authMode = authMode === "signup" ? "login" : "signup";
