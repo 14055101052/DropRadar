@@ -39,7 +39,7 @@ function validate(input) {
   if (!STOCK.has(x.availability)) throw new Error("Invalid availability.");
   x.normalizedTitle = normalize(x.title);
   // Exact model matching only; otherwise exact normalized title + brand.
-  x.canonicalKey = x.model ? [normalize(x.brand),normalize(x.model)].filter(Boolean).join("|") : [normalize(x.brand),x.normalizedTitle].filter(Boolean).join("|");
+  x.canonicalKey = [normalize(x.brand),normalize(x.model),x.normalizedTitle].filter(Boolean).join("|");
   if (!x.canonicalKey) throw new Error("Product needs a usable title or brand.");
   x.productUrl = url.toString();
   return x;
@@ -100,7 +100,7 @@ async function searchCatalog(storage,q,store) {
   const rows=storage.sqlite.prepare("SELECT p.id AS productId,p.title,p.brand,p.model,o.id AS offerId,o.retailer_id AS storeId,o.retailer_id AS merchant,o.product_url AS productUrl,o.image_url AS imageUrl,o.price,o.mrp,o.currency,o.availability,CASE WHEN o.availability='in_stock' THEN 1 WHEN o.availability='out_of_stock' THEN 0 ELSE NULL END AS inStock FROM catalog_products p JOIN store_offers o ON o.product_id=p.id WHERE (p.normalized_title LIKE ? OR LOWER(COALESCE(p.brand,'')) LIKE ? OR LOWER(o.title) LIKE ?)"+filter+" ORDER BY CASE WHEN o.price IS NULL THEN 1 ELSE 0 END,o.price ASC,o.last_seen_at DESC LIMIT 50").all(...args);
   return rows.map(r=>addDiscount({...r,inStock:r.inStock===null?null:Boolean(r.inStock)}));
 }
-function addDiscount(row){return {...row,discountPercentage:row.mrp&&row.price&&row.mrp>row.price?Math.round((row.mrp-row.price)/row.mrp*100):null};}
+function addDiscount(row){const names={amazon:"Amazon",flipkart:"Flipkart",myntra:"Myntra",croma:"Croma",ajio:"AJIO",tatacliq:"Tata CLiQ"};return {...row,merchant:names[row.merchant]||row.merchant,discountPercentage:row.mrp&&row.price&&row.mrp>row.price?Math.round((row.mrp-row.price)/row.mrp*100):null};}
 async function providerStatuses(storage) {
   return storage.pool
     ? (await storage.pool.query("SELECT provider_id AS id,display_name AS name,status,last_success_at,last_error FROM provider_status ORDER BY display_name")).rows
