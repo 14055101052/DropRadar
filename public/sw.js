@@ -1,5 +1,5 @@
-const CACHE = "dropradar-shell-v6";
-const ASSETS = ["/", "/index.html", "/styles.css", "/app.js", "/retailer-browser.css", "/retailer-browser.js", "/manifest.webmanifest", "/icon.svg"];
+const CACHE = "dropradar-shell-v7";
+const ASSETS = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
