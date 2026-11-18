@@ -29,7 +29,7 @@ test("rejects a retailer URL hosted on an unrelated domain", () => {
 });
 
 test("rejects non-HTTPS or non-HTTP product URLs", () => {
-  assert.throws(() => validate({ ...valid, productUrl: "javascript:alert(1)" }), /valid product URL/);
+  assert.throws(() => validate({ ...valid, productUrl: "javascript:alert(1)" }), /HTTP or HTTPS/);
 });
 
 test("rejects an MRP below the current price", () => {
