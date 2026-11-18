@@ -9,7 +9,7 @@
   const buttons = [...section.querySelectorAll("[data-retailer]")];
 
   const stores = {
-    amazon: { name: "Amazon", home: "https://www.amazon.in/", search: q => "https://www.amazon.in/s?k=" + encodeURIComponent(q) },
+    amazon: { name: "Amazon", home: "https://www.amazon.in/gp/aw/", search: q => "https://www.amazon.in/gp/aw/s?k=" + encodeURIComponent(q) },
     flipkart: { name: "Flipkart", home: "https://www.flipkart.com/", search: q => "https://www.flipkart.com/search?q=" + encodeURIComponent(q) },
     myntra: { name: "Myntra", home: "https://www.myntra.com/", search: q => "https://www.myntra.com/search?q=" + encodeURIComponent(q) },
     croma: { name: "Croma", home: "https://www.croma.com/", search: q => "https://www.croma.com/searchB?q=" + encodeURIComponent(q) },
