@@ -137,12 +137,16 @@ app.get("/api/watchlist", async (_req, res, next) => {
   try {
     if (pool) {
       const result = await pool.query(
-        "SELECT id::text AS id, url, title, merchant, target_price::float8 AS target_price, created_at FROM watchlist ORDER BY id DESC"
+        "SELECT w.id::text AS id,w.url,w.title,w.merchant,w.target_price::float8 AS target_price,w.created_at," +
+        "w.catalog_product_id::text AS product_id,w.store_offer_id::text AS offer_id,o.price::float8 AS current_price,o.currency,o.availability " +
+        "FROM watchlist w LEFT JOIN store_offers o ON o.id=w.store_offer_id ORDER BY w.id DESC"
       );
       return res.json({ items: result.rows });
     }
     const rows = sqlite.prepare(
-      "SELECT id, url, title, merchant, target_price, created_at FROM watchlist ORDER BY id DESC"
+      "SELECT w.id,w.url,w.title,w.merchant,w.target_price,w.created_at,w.catalog_product_id AS product_id," +
+      "w.store_offer_id AS offer_id,o.price AS current_price,o.currency,o.availability " +
+      "FROM watchlist w LEFT JOIN store_offers o ON o.id=w.store_offer_id ORDER BY w.id DESC"
     ).all();
     return res.json({ items: rows });
   } catch (error) { next(error); }
@@ -153,6 +157,15 @@ app.post("/api/watchlist", async (req, res, next) => {
   const info = identifyMerchant(String(req.body.url || "").trim());
   const rawTarget = req.body.targetPrice;
   const target = rawTarget === "" || rawTarget == null ? null : Number(rawTarget);
+  const productId = String(req.body.productId || "").trim();
+  const offerId = String(req.body.offerId || "").trim();
+  const validUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  if ((productId && !validUuid(productId)) || (offerId && !validUuid(offerId))) {
+    return res.status(400).json({ error: "Invalid catalogue reference." });
+  }
+  if (Boolean(productId) !== Boolean(offerId)) {
+    return res.status(400).json({ error: "Product and offer references must be supplied together." });
+  }
 
   if (!info) return res.status(400).json({ error: "Enter a valid public http or https product URL." });
   if (!title) return res.status(400).json({ error: "Give this product a name so you can recognise it." });
@@ -166,18 +179,26 @@ app.post("/api/watchlist", async (req, res, next) => {
   try {
     let item;
     if (pool) {
+      if (offerId) {
+        const linked = await pool.query("SELECT 1 FROM store_offers WHERE id=$1 AND product_id=$2", [offerId, productId]);
+        if (!linked.rowCount) return res.status(400).json({ error: "Catalogue listing was not found." });
+      }
       const result = await pool.query(
-        "INSERT INTO watchlist (url, title, merchant, target_price) VALUES ($1, $2, $3, $4) " +
-        "RETURNING id::text AS id, url, title, merchant, target_price::float8 AS target_price, created_at",
-        [info.url, title, info.merchant, target]
+        "INSERT INTO watchlist (url,title,merchant,target_price,catalog_product_id,store_offer_id) VALUES ($1,$2,$3,$4,$5,$6) " +
+        "RETURNING id::text AS id,url,title,merchant,target_price::float8 AS target_price,created_at,catalog_product_id::text AS product_id,store_offer_id::text AS offer_id",
+        [info.url,title,info.merchant,target,productId || null,offerId || null]
       );
       item = result.rows[0];
     } else {
+      if (offerId) {
+        const linked = sqlite.prepare("SELECT 1 FROM store_offers WHERE id=? AND product_id=?").get(offerId, productId);
+        if (!linked) return res.status(400).json({ error: "Catalogue listing was not found." });
+      }
       const result = sqlite.prepare(
-        "INSERT INTO watchlist (url, title, merchant, target_price) VALUES (?, ?, ?, ?)"
-      ).run(info.url, title, info.merchant, target);
+        "INSERT INTO watchlist (url,title,merchant,target_price,catalog_product_id,store_offer_id) VALUES (?,?,?,?,?,?)"
+      ).run(info.url,title,info.merchant,target,productId || null,offerId || null);
       item = sqlite.prepare(
-        "SELECT id, url, title, merchant, target_price, created_at FROM watchlist WHERE id = ?"
+        "SELECT id,url,title,merchant,target_price,created_at,catalog_product_id AS product_id,store_offer_id AS offer_id FROM watchlist WHERE id=?"
       ).get(result.lastInsertRowid);
     }
     return res.status(201).json({
