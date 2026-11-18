@@ -326,7 +326,7 @@ async function trackProduct(item, button) {
     const response = await fetch("/api/watchlist", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: item.title, url, targetPrice: "" })
+      body: JSON.stringify({ title: item.title, url, targetPrice: "", productId: item.productId, offerId: item.offerId })
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || data.message || "Could not save this product.");
@@ -436,9 +436,10 @@ function renderWatchlist(items) {
     '<article class="watch-item"><div class="watch-main">' +
       '<strong>' + escapeHtml(item.title) + '</strong>' +
       '<span>' + escapeHtml(item.merchant) + ' · ' + escapeHtml(item.url) + '</span>' +
+      (item.current_price != null ? '<span>Last recorded: ' + escapeHtml(formatMoney(item.current_price, item.currency || "INR")) + '</span>' : '') +
     '</div><div class="watch-meta">' +
       (item.target_price ? '<span class="target">Target ' + escapeHtml(formatMoney(item.target_price)) + '</span>' : '') +
-      '<span class="status">Saved · monitoring not active</span>' +
+      '<span class="status">' + (item.offer_id ? 'Saved · automatic checks not active' : 'Saved link · no verified listing linked') + '</span>' +
       '<button class="set-target-btn" data-set-target="' + escapeHtml(item.id) + '">Set target</button>' +
       '<button class="remove-btn" data-remove="' + escapeHtml(item.id) + '" aria-label="Remove ' +
         escapeHtml(item.title) + '">×</button>' +
