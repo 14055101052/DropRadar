@@ -12,7 +12,6 @@ let authMode = "signup";
 let toastTimer;
 let currentSearchItems = [];
 let activeStore = "all";
-const compareSelection = new Set();
 
 const STORE_NAMES = {
   amazon: "Amazon",
@@ -106,10 +105,71 @@ function filteredItems() {
   return selected;
 }
 
+function groupCatalogItems(items) {
+  const groups = new Map();
+  items.forEach((item, index) => {
+    // Only a shared canonical product ID proves that offers are the same product.
+    const key = item.productId ? "product:" + item.productId : "offer:" + (item.offerId || item.productUrl || index);
+    if (!groups.has(key)) groups.set(key, { product: item, offers: [] });
+    groups.get(key).offers.push({ item, index });
+  });
+  return Array.from(groups.values()).map((group) => {
+    group.offers.sort((a, b) => {
+      const ap = Number(a.item.price), bp = Number(b.item.price);
+      const av = Number.isFinite(ap) && ap > 0, bv = Number.isFinite(bp) && bp > 0;
+      if (av && bv) return ap - bp;
+      if (av) return -1;
+      if (bv) return 1;
+      return 0;
+    });
+    const prices = group.offers.map((entry) => Number(entry.item.price)).filter((price) => Number.isFinite(price) && price > 0);
+    group.lowestPrice = prices.length ? Math.min(...prices) : Number.POSITIVE_INFINITY;
+    return group;
+  }).sort((a, b) => a.lowestPrice - b.lowestPrice);
+}
+
+function formatLastChecked(value) {
+  if (!value) return "Update time not supplied";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Update time unavailable";
+  return "Feed checked " + new Intl.DateTimeFormat("en-IN", {
+    day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit"
+  }).format(date);
+}
+
+function comparisonVerdict(offers) {
+  const priced = offers.map((entry) => entry.item).filter((item) => {
+    const price = Number(item.price);
+    return Number.isFinite(price) && price > 0;
+  });
+  const byStore = new Map();
+  for (const item of priced) {
+    const store = storeIdFor(item);
+    const existing = byStore.get(store);
+    if (!existing || Number(item.price) < Number(existing.price)) byStore.set(store, item);
+  }
+  const storeOffers = Array.from(byStore.values());
+  if (storeOffers.length < 2) {
+    return "Only one retailer has a verified price for this product right now. A cross-store winner cannot be determined yet.";
+  }
+  const currencies = new Set(storeOffers.map((item) => String(item.currency || "INR").toUpperCase()));
+  if (currencies.size !== 1) {
+    return "Offers use different currencies, so DropRadar is not ranking them against each other.";
+  }
+  storeOffers.sort((a, b) => Number(a.price) - Number(b.price));
+  const lowest = storeOffers[0], next = storeOffers[1];
+  const gap = Number(next.price) - Number(lowest.price);
+  if (gap === 0) {
+    return "Lowest listed price is tied at " + formatMoney(lowest.price, lowest.currency || "INR") +
+      " across " + storeOffers.filter((item) => Number(item.price) === Number(lowest.price)).length + " retailers.";
+  }
+  return (lowest.merchant || "One retailer") + " has the lowest listed price at " +
+    formatMoney(lowest.price, lowest.currency || "INR") + " — " +
+    formatMoney(gap, lowest.currency || "INR") + " less than the next retailer.";
+}
+
 function renderSearchResults() {
   const items = filteredItems();
-  compareSelection.clear();
-
   if (!items.length) {
     const storeName = activeStore === "all" ? "connected stores" : STORE_NAMES[activeStore];
     searchResults.innerHTML =
@@ -121,165 +181,74 @@ function renderSearchResults() {
     return;
   }
 
-  const cards = items.map((item, index) => {
-    const title = escapeHtml(item.title);
-    const brand = escapeHtml(item.brand || "Product");
-    const imageUrl = safeHttpUrl(item.imageUrl);
-    const productUrl = safeHttpUrl(item.productUrl || item.url);
-    const price = formatMoney(item.price, item.currency || "INR");
-    const mrp = Number(item.mrp);
-    const actualPrice = Number(item.price);
-    const hasMrp = Number.isFinite(mrp) && mrp > 0 && Number.isFinite(actualPrice) && mrp > actualPrice;
-    const discount = Number(item.discountPercentage);
-    const hasDiscount = Number.isFinite(discount) && discount > 0 && discount <= 99;
-    const merchant = escapeHtml(item.merchant || item.store || "Store not identified");
-    const stock = item.inStock === true
-      ? '<span class="stock-status in-stock">In stock</span>'
-      : item.inStock === false
-        ? '<span class="stock-status out-stock">Out of stock</span>'
-        : '<span class="stock-status">Stock not confirmed</span>';
-    const specs = Array.isArray(item.keySpecs)
-      ? item.keySpecs.slice(0, 3).map((spec) => '<span>' + escapeHtml(spec) + '</span>').join("")
-      : "";
+  const groups = groupCatalogItems(items);
+  const cards = groups.map((group) => {
+    const product = group.product;
+    const title = escapeHtml(product.title || "Verified product");
+    const brand = escapeHtml(product.brand || "Product");
+    const model = product.model ? '<span class="product-model">' + escapeHtml(product.model) + '</span>' : "";
+    const imageUrl = safeHttpUrl(product.imageUrl) || safeHttpUrl(group.offers.map((entry) => entry.item.imageUrl).find(Boolean));
     const image = imageUrl
       ? '<img src="' + escapeHtml(imageUrl) + '" alt="' + title + '" loading="lazy" referrerpolicy="no-referrer">'
       : '<div class="product-placeholder" aria-hidden="true">◇</div>';
-    const buyLabel = "Buy Now at " + (actualPrice > 0 ? formatMoney(actualPrice, item.currency || "INR") : "Store");
-    const buyAction = productUrl
-      ? '<a class="buy-now" href="' + escapeHtml(productUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(buyLabel) + ' ↗</a>'
-      : '<span class="buy-now disabled">Store link unavailable</span>';
 
-    return '<article class="product-card" data-product-index="' + index + '" tabindex="0" role="button" aria-label="Select ' + title + ' for comparison">' +
-      '<div class="product-image">' + image + '</div>' +
-      '<div class="product-body">' +
-        '<div class="product-card-top"><span class="product-brand">' + brand + '</span><span class="store-tag">' + merchant + '</span></div>' +
-        '<h3>' + title + '</h3>' +
-        '<div class="price-row"><strong>' + escapeHtml(price) + '</strong>' +
+    const offers = group.offers.map((entry) => {
+      const item = entry.item;
+      const merchant = escapeHtml(item.merchant || STORE_NAMES[item.storeId] || "Store not identified");
+      const priceNumber = Number(item.price);
+      const hasPrice = Number.isFinite(priceNumber) && priceNumber > 0;
+      const price = hasPrice ? formatMoney(priceNumber, item.currency || "INR") : "Price unavailable";
+      const mrp = Number(item.mrp);
+      const hasMrp = hasPrice && Number.isFinite(mrp) && mrp > priceNumber;
+      const discount = Number(item.discountPercentage);
+      const hasDiscount = Number.isFinite(discount) && discount > 0 && discount <= 99;
+      const stock = item.inStock === true
+        ? '<span class="stock-status in-stock">In stock</span>'
+        : item.inStock === false
+          ? '<span class="stock-status out-stock">Out of stock</span>'
+          : '<span class="stock-status">Stock not confirmed</span>';
+      const productUrl = safeHttpUrl(item.productUrl || item.url);
+      const buy = productUrl
+        ? '<a class="buy-now" href="' + escapeHtml(productUrl) + '" target="_blank" rel="noopener noreferrer">View at store ↗</a>'
+        : '<span class="buy-now disabled">Store link unavailable</span>';
+      return '<div class="offer-row">' +
+        '<div class="offer-store"><strong>' + merchant + '</strong><span>' + escapeHtml(formatLastChecked(item.lastSeenAt)) + '</span></div>' +
+        '<div class="offer-price"><strong>' + escapeHtml(price) + '</strong>' +
           (hasMrp ? '<del class="mrp">' + escapeHtml(formatMoney(mrp, item.currency || "INR")) + '</del>' : '') +
-          (hasDiscount ? '<span class="discount">' + Math.round(discount) + '% off</span>' : '') +
-        '</div>' + stock +
-        (specs ? '<div class="product-specs">' + specs + '</div>' : '') +
-        '<div class="product-actions">' + buyAction +
-          '<button class="track-product" data-track-index="' + index + '">Track Price Drop 🔔</button>' +
-        '</div>' +
-      '</div></article>';
+          (hasDiscount ? '<span class="discount">' + Math.round(discount) + '% off MRP</span>' : '') +
+        '</div><div class="offer-stock">' + stock + '</div>' +
+        '<div class="offer-actions">' + buy +
+          '<button class="track-product" data-track-index="' + entry.index + '">Track price</button></div></div>';
+    }).join("");
+
+    return '<article class="comparison-product-card">' +
+      '<div class="comparison-product-summary"><div class="product-image">' + image + '</div>' +
+      '<div class="comparison-product-info"><span class="product-brand">' + brand + '</span>' +
+      '<h3>' + title + '</h3>' + model +
+      '<span class="offer-count">' + group.offers.length + ' verified retailer ' +
+        (group.offers.length === 1 ? "offer" : "offers") + '</span></div></div>' +
+      '<div class="comparison-verdict"><span>PRICE CHECK</span><strong>' +
+        escapeHtml(comparisonVerdict(group.offers)) + '</strong></div>' +
+      '<div class="offer-list">' + offers + '</div>' +
+      '<p class="comparison-note">Prices and availability can change. This compares the same catalogue product ID only. Confirm final price, seller, delivery and returns at the retailer.</p>' +
+      '</article>';
   }).join("");
 
+  const offerCount = items.length;
   searchResults.innerHTML =
-    '<div class="results-heading"><div><strong>' + items.length + ' ' +
-    (items.length === 1 ? "listing" : "listings") + '</strong><span>Lowest listed prices first · Select a listing to compare</span></div>' +
-    '<span class="source-label">Retailer data</span></div>' +
-    '<div class="product-grid">' + cards + '</div>' +
-    '<section id="comparisonPanel" class="comparison-shell hidden" aria-live="polite"></section>' +
-    '<p class="results-disclaimer">Prices, stock and store details can change. Confirm the final price, delivery and returns on the store website. Buy Now opens the retailer directly; no affiliate tag is added.</p>';
-
+    '<div class="results-heading"><div><strong>' + groups.length + ' ' +
+    (groups.length === 1 ? "product" : "products") + ' · ' + offerCount + ' retailer ' +
+    (offerCount === 1 ? "offer" : "offers") + '</strong><span>Same-product offers grouped together · Lowest listed prices first</span></div>' +
+    '<span class="source-label">Verified catalogue</span></div>' +
+    '<div class="comparison-product-list">' + cards + '</div>' +
+    '<p class="results-disclaimer">Retailer data only. If a store does not provide a field, DropRadar leaves it blank instead of guessing. Buy Now opens the retailer directly; no affiliate tag is added.</p>';
   searchResults.classList.remove("hidden");
-  searchResults.querySelectorAll(".product-card").forEach((card) => {
-    card.addEventListener("click", () => selectForCompare(Number(card.dataset.productIndex)));
-    card.addEventListener("keydown", (event) => {
-      if (event.target !== card) return;
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        selectForCompare(Number(card.dataset.productIndex));
-      }
-    });
-  });
-  searchResults.querySelectorAll(".buy-now").forEach((link) => {
-    link.addEventListener("click", (event) => event.stopPropagation());
-  });
   searchResults.querySelectorAll("[data-track-index]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       trackProduct(items[Number(button.dataset.trackIndex)], button);
     });
   });
-}
-
-function selectForCompare(index) {
-  const items = filteredItems();
-  const product = items[index];
-  if (!product) return;
-
-  if (compareSelection.has(index)) {
-    compareSelection.delete(index);
-  } else {
-    if (compareSelection.size >= 3) {
-      notify("Compare up to 3 listings at a time.");
-      return;
-    }
-    compareSelection.add(index);
-  }
-  renderComparisonPanel();
-  searchResults.querySelectorAll(".product-card").forEach((card) => {
-    card.classList.toggle("selected", compareSelection.has(Number(card.dataset.productIndex)));
-  });
-}
-
-function renderComparisonPanel() {
-  const panel = $("#comparisonPanel");
-  if (!panel) return;
-  const items = filteredItems();
-  const selected = Array.from(compareSelection).map((index) => items[index]).filter(Boolean);
-  if (!selected.length) {
-    panel.classList.add("hidden");
-    panel.innerHTML = "";
-    return;
-  }
-
-  const priceRows = selected
-    .map((item) => ({ item, price: Number(item.price) }))
-    .filter((entry) => Number.isFinite(entry.price) && entry.price > 0)
-    .sort((a, b) => a.price - b.price);
-
-  let verdict = "Select more listings to compare their verified prices.";
-  if (priceRows.length === 1) {
-    verdict = "The selected listing is " + (priceRows[0].item.merchant || "from this store") +
-      " at " + formatMoney(priceRows[0].price, priceRows[0].item.currency || "INR") +
-      ". Add another listing to compare prices.";
-  } else if (priceRows.length > 1) {
-    const lowest = priceRows[0];
-    const second = priceRows[1];
-    const gap = second.price - lowest.price;
-    verdict = gap === 0
-      ? "The lowest listed price is tied at " + formatMoney(lowest.price, lowest.item.currency || "INR") + "."
-      : "Lowest listed price: " + (lowest.item.merchant || "Selected store") + " at " +
-        formatMoney(lowest.price, lowest.item.currency || "INR") + " — " +
-        formatMoney(gap, lowest.item.currency || "INR") + " below the next selected listing.";
-  }
-
-  const headers = selected.map((item, index) =>
-    '<th scope="col"><span class="compare-store">' + escapeHtml(item.merchant || item.store || ("Listing " + (index + 1))) +
-    '</span><span class="compare-product-name">' + escapeHtml(item.title || "Product") + '</span></th>'
-  ).join("");
-  const getValue = (item, key, fallback) => {
-    const value = item[key];
-    return value === null || value === undefined || value === "" ? fallback : escapeHtml(value);
-  };
-  const rows = [
-    ["Current price", (item) => escapeHtml(formatMoney(item.price, item.currency || "INR"))],
-    ["Delivery estimate", (item) => getValue(item, "deliveryEstimate", "Not supplied")],
-    ["Seller rating", (item) => item.sellerRating == null ? "Not supplied" : escapeHtml(item.sellerRating)],
-    ["Return policy", (item) => getValue(item, "returnPolicy", "Not supplied")]
-  ];
-  const body = rows.map(([label, render]) =>
-    '<tr><th scope="row">' + label + '</th>' + selected.map((item) => '<td>' + render(item) + '</td>').join("") + '</tr>'
-  ).join("");
-
-  panel.innerHTML =
-    '<div class="verdict-card"><div class="verdict-kicker">DROPRADAR BUYING VERDICT</div><strong>' +
-    escapeHtml(verdict) + '</strong><p>This verdict compares only the fields supplied by connected stores. Delivery, seller ratings and return terms are not guessed. It is a transparent price rule, not an AI-generated recommendation.</p></div>' +
-    '<div class="comparison-heading"><div><strong>Side-by-side comparison</strong><span>' + selected.length + ' selected listing' + (selected.length === 1 ? "" : "s") + '</span></div>' +
-    '<button type="button" id="clearCompare" class="text-btn">Clear selection</button></div>' +
-    '<div class="comparison-scroll"><table class="comparison-table"><thead><tr><th scope="col">Details</th>' +
-    headers + '</tr></thead><tbody>' + body + '</tbody></table></div>';
-
-  panel.classList.remove("hidden");
-  $("#clearCompare").addEventListener("click", () => {
-    compareSelection.clear();
-    renderComparisonPanel();
-    searchResults.querySelectorAll(".product-card").forEach((card) => card.classList.remove("selected"));
-  });
-  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 async function search() {
