@@ -5,6 +5,8 @@ const Database = require("better-sqlite3");
 const { Pool } = require("pg");
 const { migrateStorage } = require("./db/migrations");
 const crypto = require("crypto");
+const { promisify } = require("util");
+const scrypt = promisify(crypto.scrypt);
 const { ingestOffer, searchCatalog, providerStatuses, markProviderError } = require("./db/catalog");
 const { searchAndIngest: searchFlipkart } = require("./providers/flipkart");
 
@@ -62,6 +64,74 @@ function identifyMerchant(raw) {
   };
 }
 
+
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const authAttempts = new Map();
+
+function cookieValue(req, name) {
+  const raw = String(req.headers.cookie || "");
+  const part = raw.split(";").map((entry) => entry.trim()).find((entry) => entry.startsWith(name + "="));
+  return part ? decodeURIComponent(part.slice(name.length + 1)) : "";
+}
+function sessionCookie(token, maxAge) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return "dr_session=" + encodeURIComponent(token) + "; Path=/; HttpOnly; SameSite=Strict; Max-Age=" + maxAge + secure;
+}
+function checkSameOrigin(req, res) {
+  const origin = req.get("origin");
+  if (!origin) return true;
+  try {
+    if (new URL(origin).origin === new URL(req.protocol + "://" + req.get("host")).origin) return true;
+  } catch {}
+  res.status(403).json({ error: "Request origin was not accepted." });
+  return false;
+}
+function rateLimitAuth(req, res) {
+  const key = req.ip || req.socket.remoteAddress || "unknown";
+  const now = Date.now();
+  const current = authAttempts.get(key) || { count: 0, resetAt: now + 15 * 60 * 1000 };
+  if (now > current.resetAt) { current.count = 0; current.resetAt = now + 15 * 60 * 1000; }
+  current.count += 1;
+  authAttempts.set(key, current);
+  if (authAttempts.size > 5000) authAttempts.clear();
+  if (current.count <= 12) return true;
+  res.status(429).json({ error: "Too many sign-in attempts. Please wait a little and try again." });
+  return false;
+}
+async function createSession(userId, res) {
+  const token = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+  if (pool) {
+    await pool.query("INSERT INTO user_sessions (token_hash,user_id,expires_at) VALUES ($1,$2,$3)", [tokenHash,userId,expiresAt]);
+  } else {
+    sqlite.prepare("INSERT INTO user_sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").run(tokenHash,userId,expiresAt.toISOString());
+  }
+  res.setHeader("Set-Cookie", sessionCookie(token, SESSION_TTL_MS / 1000));
+}
+async function requireUser(req, res, next) {
+  try {
+    const token = cookieValue(req, "dr_session");
+    if (!token || token.length > 200) return res.status(401).json({ error: "Sign in to use your personal watchlist.", code: "AUTH_REQUIRED" });
+    const hash = crypto.createHash("sha256").update(token).digest("hex");
+    let user;
+    if (pool) {
+      const result = await pool.query(
+        "SELECT u.id::text AS id,u.email FROM user_sessions s JOIN app_users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>NOW()",
+        [hash]
+      );
+      user = result.rows[0];
+    } else {
+      user = sqlite.prepare(
+        "SELECT u.id,u.email FROM user_sessions s JOIN app_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>CURRENT_TIMESTAMP"
+      ).get(hash);
+    }
+    if (!user) return res.status(401).json({ error: "Your session expired. Please sign in again.", code: "AUTH_REQUIRED" });
+    req.user = user;
+    next();
+  } catch (error) { next(error); }
+}
+
 async function initializeStorage() {
   await migrateStorage({ pool, sqlite });
 }
@@ -82,6 +152,77 @@ app.get("/api/health", async (_req, res, next) => {
       productSearch: "verified-catalogue-and-configured-retailer-providers",
       affiliateLinks: false
     });
+  } catch (error) { next(error); }
+});
+
+
+app.get("/api/auth/me", async (req, res) => {
+  const token = cookieValue(req, "dr_session");
+  if (!token || token.length > 200) return res.json({ user: null });
+  const hash = crypto.createHash("sha256").update(token).digest("hex");
+  try {
+    const result = pool
+      ? await pool.query("SELECT u.id::text AS id,u.email FROM user_sessions s JOIN app_users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>NOW()", [hash])
+      : { rows: [sqlite.prepare("SELECT u.id,u.email FROM user_sessions s JOIN app_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>CURRENT_TIMESTAMP").get(hash)].filter(Boolean) };
+    res.json({ user: result.rows[0] || null });
+  } catch (error) { console.error("Auth lookup failed:", error.message); res.status(500).json({ error: "Could not check your sign-in." }); }
+});
+
+app.post("/api/auth/signup", async (req, res, next) => {
+  if (!checkSameOrigin(req,res) || !rateLimitAuth(req,res)) return;
+  const email = String(req.body.email || "").trim().toLowerCase();
+  const password = String(req.body.password || "");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return res.status(400).json({ error: "Enter a valid email address." });
+  if (password.length < 10 || password.length > 128) return res.status(400).json({ error: "Use a password between 10 and 128 characters." });
+  try {
+    const salt = crypto.randomBytes(16);
+    const derived = await scrypt(password, salt, 64);
+    const passwordHash = "scrypt$" + salt.toString("hex") + "$" + Buffer.from(derived).toString("hex");
+    const userId = crypto.randomUUID();
+    if (pool) await pool.query("INSERT INTO app_users (id,email,password_hash) VALUES ($1,$2,$3)", [userId,email,passwordHash]);
+    else sqlite.prepare("INSERT INTO app_users (id,email,password_hash) VALUES (?,?,?)").run(userId,email,passwordHash);
+    await createSession(userId,res);
+    res.status(201).json({ user: { id:userId,email } });
+  } catch (error) {
+    if (error.code === "23505" || error.code === "SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({ error: "An account with this email already exists." });
+    next(error);
+  }
+});
+
+app.post("/api/auth/login", async (req, res, next) => {
+  if (!checkSameOrigin(req,res) || !rateLimitAuth(req,res)) return;
+  const email = String(req.body.email || "").trim().toLowerCase();
+  const password = String(req.body.password || "");
+  if (email.length > 254 || password.length > 128) return res.status(400).json({ error: "Check your email and password." });
+  try {
+    const result = pool
+      ? await pool.query("SELECT id::text AS id,email,password_hash FROM app_users WHERE LOWER(email)=$1", [email])
+      : { rows: [sqlite.prepare("SELECT id,email,password_hash FROM app_users WHERE email=? COLLATE NOCASE").get(email)].filter(Boolean) };
+    const user = result.rows[0];
+    let valid = false;
+    if (user && user.password_hash.startsWith("scrypt$")) {
+      const [,saltHex,hashHex] = user.password_hash.split("$");
+      const expected = Buffer.from(hashHex,"hex");
+      const actual = Buffer.from(await scrypt(password,Buffer.from(saltHex,"hex"),expected.length));
+      valid = expected.length === actual.length && crypto.timingSafeEqual(expected,actual);
+    }
+    if (!valid) return res.status(401).json({ error: "Email or password is incorrect." });
+    await createSession(user.id,res);
+    res.json({ user: { id:user.id,email:user.email } });
+  } catch (error) { next(error); }
+});
+
+app.post("/api/auth/logout", async (req, res, next) => {
+  if (!checkSameOrigin(req,res)) return;
+  try {
+    const token = cookieValue(req,"dr_session");
+    if (token && token.length <= 200) {
+      const hash = crypto.createHash("sha256").update(token).digest("hex");
+      if (pool) await pool.query("DELETE FROM user_sessions WHERE token_hash=$1",[hash]);
+      else sqlite.prepare("DELETE FROM user_sessions WHERE token_hash=?").run(hash);
+    }
+    res.setHeader("Set-Cookie",sessionCookie("",0));
+    res.json({ ok:true });
   } catch (error) { next(error); }
 });
 
@@ -175,26 +316,26 @@ app.get("/api/catalog/offers/:offerId/history", async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-app.get("/api/watchlist", async (_req, res, next) => {
+app.get("/api/watchlist", requireUser, async (req, res, next) => {
   try {
     if (pool) {
       const result = await pool.query(
         "SELECT w.id::text AS id,w.url,w.title,w.merchant,w.target_price::float8 AS target_price,w.created_at," +
         "w.catalog_product_id::text AS product_id,w.store_offer_id::text AS offer_id,o.price::float8 AS current_price,o.currency,o.availability,o.last_seen_at AS price_seen_at " +
-        "FROM watchlist w LEFT JOIN store_offers o ON o.id=w.store_offer_id ORDER BY w.id DESC"
-      );
+        "FROM watchlist w LEFT JOIN store_offers o ON o.id=w.store_offer_id WHERE w.user_id=$1 ORDER BY w.id DESC"
+      , [req.user.id]);
       return res.json({ items: result.rows });
     }
     const rows = sqlite.prepare(
       "SELECT w.id,w.url,w.title,w.merchant,w.target_price,w.created_at,w.catalog_product_id AS product_id," +
       "w.store_offer_id AS offer_id,o.price AS current_price,o.currency,o.availability,o.last_seen_at AS price_seen_at " +
-      "FROM watchlist w LEFT JOIN store_offers o ON o.id=w.store_offer_id ORDER BY w.id DESC"
-    ).all();
+      "FROM watchlist w LEFT JOIN store_offers o ON o.id=w.store_offer_id WHERE w.user_id=? ORDER BY w.id DESC"
+    ).all(req.user.id);
     return res.json({ items: rows });
   } catch (error) { next(error); }
 });
 
-app.post("/api/watchlist", async (req, res, next) => {
+app.post("/api/watchlist", requireUser, async (req, res, next) => {
   const title = String(req.body.title || "").trim().slice(0, 140);
   const info = identifyMerchant(String(req.body.url || "").trim());
   const rawTarget = req.body.targetPrice;
@@ -226,9 +367,9 @@ app.post("/api/watchlist", async (req, res, next) => {
         if (!linked.rowCount) return res.status(400).json({ error: "Catalogue listing was not found." });
       }
       const result = await pool.query(
-        "INSERT INTO watchlist (url,title,merchant,target_price,catalog_product_id,store_offer_id) VALUES ($1,$2,$3,$4,$5,$6) " +
+        "INSERT INTO watchlist (url,title,merchant,target_price,catalog_product_id,store_offer_id,user_id) VALUES ($1,$2,$3,$4,$5,$6,$7) " +
         "RETURNING id::text AS id,url,title,merchant,target_price::float8 AS target_price,created_at,catalog_product_id::text AS product_id,store_offer_id::text AS offer_id",
-        [info.url,title,info.merchant,target,productId || null,offerId || null]
+        [info.url,title,info.merchant,target,productId || null,offerId || null,req.user.id]
       );
       item = result.rows[0];
     } else {
@@ -237,8 +378,8 @@ app.post("/api/watchlist", async (req, res, next) => {
         if (!linked) return res.status(400).json({ error: "Catalogue listing was not found." });
       }
       const result = sqlite.prepare(
-        "INSERT INTO watchlist (url,title,merchant,target_price,catalog_product_id,store_offer_id) VALUES (?,?,?,?,?,?)"
-      ).run(info.url,title,info.merchant,target,productId || null,offerId || null);
+        "INSERT INTO watchlist (url,title,merchant,target_price,catalog_product_id,store_offer_id,user_id) VALUES (?,?,?,?,?,?,?)"
+      ).run(info.url,title,info.merchant,target,productId || null,offerId || null,req.user.id);
       item = sqlite.prepare(
         "SELECT id,url,title,merchant,target_price,created_at,catalog_product_id AS product_id,store_offer_id AS offer_id FROM watchlist WHERE id=?"
       ).get(result.lastInsertRowid);
@@ -256,7 +397,7 @@ app.post("/api/watchlist", async (req, res, next) => {
   }
 });
 
-app.patch("/api/watchlist/:id", async (req, res, next) => {
+app.patch("/api/watchlist/:id", requireUser, async (req, res, next) => {
   const id = String(req.params.id);
   if (!/^\d+$/.test(id)) return res.status(404).json({ error: "Item not found." });
 
@@ -270,14 +411,14 @@ app.patch("/api/watchlist/:id", async (req, res, next) => {
     let item;
     if (pool) {
       const result = await pool.query(
-        "UPDATE watchlist SET target_price = $1 WHERE id = $2 " +
+        "UPDATE watchlist SET target_price = $1 WHERE id = $2 AND user_id = $3 " +
         "RETURNING id::text AS id, url, title, merchant, target_price::float8 AS target_price, created_at",
-        [target, id]
+        [target, id, req.user.id]
       );
       item = result.rows[0];
     } else {
-      const result = sqlite.prepare("UPDATE watchlist SET target_price = ? WHERE id = ?")
-        .run(target, Number(id));
+      const result = sqlite.prepare("UPDATE watchlist SET target_price = ? WHERE id = ? AND user_id = ?")
+        .run(target, Number(id), req.user.id);
       if (!result.changes) return res.status(404).json({ error: "Item not found." });
       item = sqlite.prepare(
         "SELECT id, url, title, merchant, target_price, created_at FROM watchlist WHERE id = ?"
@@ -288,16 +429,16 @@ app.patch("/api/watchlist/:id", async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-app.delete("/api/watchlist/:id", async (req, res, next) => {
+app.delete("/api/watchlist/:id", requireUser, async (req, res, next) => {
   const id = String(req.params.id);
   if (!/^\d+$/.test(id)) return res.status(404).json({ error: "Item not found." });
   try {
     let deleted;
     if (pool) {
-      const result = await pool.query("DELETE FROM watchlist WHERE id = $1", [id]);
+      const result = await pool.query("DELETE FROM watchlist WHERE id = $1 AND user_id = $2", [id, req.user.id]);
       deleted = result.rowCount;
     } else {
-      deleted = sqlite.prepare("DELETE FROM watchlist WHERE id = ?").run(Number(id)).changes;
+      deleted = sqlite.prepare("DELETE FROM watchlist WHERE id = ? AND user_id = ?").run(Number(id), req.user.id).changes;
     }
     if (!deleted) return res.status(404).json({ error: "Item not found." });
     return res.status(204).end();
