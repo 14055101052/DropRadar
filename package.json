@@ -3,8 +3,14 @@
   "version": "0.2.0",
   "private": true,
   "description": "DropRadar shopping discovery and price tracking PWA",
-  "scripts": { "start": "node server.js", "dev": "node --watch server.js" },
-  "engines": { "node": "24.22.1" },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": "24.22.1"
+  },
   "dependencies": {
     "better-sqlite3": "^13.2.0",
     "express": "^4.21.2",
