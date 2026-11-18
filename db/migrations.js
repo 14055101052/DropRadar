@@ -137,6 +137,21 @@ const MIGRATIONS = [
       `CREATE INDEX IF NOT EXISTS idx_price_observations_offer_time
         ON price_observations (offer_id, observed_at DESC)`
     ]
+  },
+  {
+    version: 2,
+    postgres: [
+      "ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS catalog_product_id UUID REFERENCES catalog_products(id) ON DELETE SET NULL",
+      "ALTER TABLE watchlist ADD COLUMN IF NOT EXISTS store_offer_id UUID REFERENCES store_offers(id) ON DELETE SET NULL",
+      "CREATE INDEX IF NOT EXISTS idx_watchlist_catalog_product ON watchlist (catalog_product_id)",
+      "CREATE INDEX IF NOT EXISTS idx_watchlist_store_offer ON watchlist (store_offer_id)"
+    ],
+    sqlite: [
+      "ALTER TABLE watchlist ADD COLUMN catalog_product_id TEXT REFERENCES catalog_products(id) ON DELETE SET NULL",
+      "ALTER TABLE watchlist ADD COLUMN store_offer_id TEXT REFERENCES store_offers(id) ON DELETE SET NULL",
+      "CREATE INDEX IF NOT EXISTS idx_watchlist_catalog_product ON watchlist (catalog_product_id)",
+      "CREATE INDEX IF NOT EXISTS idx_watchlist_store_offer ON watchlist (store_offer_id)"
+    ]
   }
 ];
 
