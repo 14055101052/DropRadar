@@ -5,7 +5,8 @@ const Database = require("better-sqlite3");
 const { Pool } = require("pg");
 const { migrateStorage } = require("./db/migrations");
 const crypto = require("crypto");
-const { ingestOffer, searchCatalog, providerStatuses } = require("./db/catalog");
+const { ingestOffer, searchCatalog, providerStatuses, markProviderError } = require("./db/catalog");
+const { searchAndIngest: searchFlipkart } = require("./providers/flipkart");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -78,14 +79,21 @@ app.get("/api/health", async (_req, res, next) => {
       service: "DropRadar",
       version: "0.3.0",
       storage: pool ? "hosted-postgresql" : "local-sqlite-temporary",
-      productSearch: "verified-catalogue-only",
+      productSearch: "verified-catalogue-and-configured-retailer-providers",
       affiliateLinks: false
     });
   } catch (error) { next(error); }
 });
 
-app.get("/api/stores", (_req, res) => {
-  res.json({ stores: STORES });
+app.get("/api/stores", async (_req, res, next) => {
+  try {
+    const providers = await providerStatuses({ pool, sqlite });
+    const flipkart = providers.find((provider) => provider.id === "flipkart-affiliate-api");
+    res.json({ stores: STORES.map((store) => ({
+      ...store,
+      connected: store.id === "flipkart" && flipkart ? flipkart.status === "connected" : false
+    })) });
+  } catch (error) { next(error); }
 });
 
 app.get("/api/search", async (req, res, next) => {
@@ -98,9 +106,19 @@ app.get("/api/search", async (req, res, next) => {
   if (store !== "all" && !STORES.some((item) => item.id === store)) {
     return res.status(400).json({ error: "Choose a store from the available filters." });
   }
+  let providerSync = { connected: false, ingested: 0 };
+  if (store === "all" || store === "flipkart") {
+    try {
+      providerSync = await searchFlipkart({ pool, sqlite }, q);
+    } catch (error) {
+      await markProviderError({ pool, sqlite }, "flipkart-affiliate-api", "Flipkart Affiliate API", error);
+      console.warn("Flipkart provider request failed:", error.message);
+      providerSync = { connected: true, ingested: 0, warning: "Flipkart could not refresh right now; showing previously stored verified listings where available." };
+    }
+  }
   try {
     const items = await searchCatalog({ pool, sqlite }, q, store);
-    return res.json({ items, query: q, selectedStore: store, source: "verified_catalogue" });
+    return res.json({ items, query: q, selectedStore: store, source: "verified_catalogue", providerSync });
   } catch (error) { return next(error); }
 });
 
