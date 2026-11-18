@@ -6,6 +6,9 @@ const searchButton = $("#searchButton");
 const form = $("#addForm");
 const list = $("#watchlistItems");
 const toast = $("#toast");
+const accountPanel = $("#accountPanel");
+let signedInUser = null;
+let authMode = "signup";
 let toastTimer;
 let currentSearchItems = [];
 let activeStore = "all";
@@ -316,6 +319,7 @@ async function search() {
 }
 
 async function trackProduct(item, button) {
+  if (!signedInUser) { notify("Create an account or sign in to save products."); accountPanel.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
   const url = safeHttpUrl(item.productUrl || item.url);
   if (!url) { notify("This listing does not include a valid retailer product link."); return; }
 
@@ -369,6 +373,7 @@ $("#cancelAdd").addEventListener("click", () => form.classList.add("hidden"));
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!signedInUser) { notify("Sign in to save products to your personal watchlist."); accountPanel.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
   const values = new FormData(form);
   const payload = {
     title: values.get("title"),
@@ -413,9 +418,96 @@ async function setTargetPrice(id, value) {
   }
 }
 
-async function loadWatchlist() {
+function renderAccount() {
+  if (!signedInUser) {
+    accountPanel.innerHTML =
+      '<div class="account-copy"><strong>Your own shopping shortlist</strong>' +
+      '<p>Create an account or sign in to save products and keep your watchlist private.</p></div>' +
+      '<form id="authForm" class="account-form">' +
+      '<input name="email" type="email" autocomplete="email" maxlength="254" required placeholder="Email address" aria-label="Email address">' +
+      '<input name="password" type="password" autocomplete="' + (authMode === "signup" ? "new-password" : "current-password") + '" minlength="10" maxlength="128" required placeholder="Password (10+ characters)" aria-label="Password">' +
+      '<button class="primary-btn" type="submit">' + (authMode === "signup" ? "Create account" : "Sign in") + '</button>' +
+      '<button class="account-toggle" id="authModeToggle" type="button">' + (authMode === "signup" ? "Already registered? Sign in" : "New to DropRadar? Create account") + '</button>' +
+      '<p class="account-note">Your password is stored as a one-way scrypt hash. Use a unique password you don't use elsewhere.</p>' +
+      '<p id="authError" class="account-error" role="alert"></p></form>';
+    $("#authModeToggle").addEventListener("click", () => {
+      authMode = authMode === "signup" ? "login" : "signup";
+      renderAccount();
+    });
+    $("#authForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = $("#authForm button[type=submit]");
+      const values = new FormData(event.currentTarget);
+      button.disabled = true;
+      button.textContent = authMode === "signup" ? "Creating…" : "Signing in…";
+      $("#authError").textContent = "";
+      try {
+        const response = await fetch("/api/auth/" + authMode, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ email: values.get("email"), password: values.get("password") })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Could not authenticate.");
+        signedInUser = data.user;
+        renderAccount();
+        notify(authMode === "signup" ? "Your DropRadar account is ready." : "Welcome back.");
+        await loadWatchlist();
+      } catch (error) {
+        $("#authError").textContent = error.message || "Could not sign in.";
+        button.disabled = false;
+        button.textContent = authMode === "signup" ? "Create account" : "Sign in";
+      }
+    });
+    return;
+  }
+  accountPanel.innerHTML =
+    '<div class="account-copy"><strong>Your DropRadar account</strong>' +
+    '<p>Your saved products are linked to this account.</p></div>' +
+    '<div class="account-actions"><span class="account-email">' + escapeHtml(signedInUser.email) + '</span>' +
+    '<button id="logoutButton" type="button" class="text-btn">Sign out</button></div>';
+  $("#logoutButton").addEventListener("click", async () => {
+    const button = $("#logoutButton");
+    button.disabled = true;
+    try {
+      const response = await fetch("/api/auth/logout", { method: "POST", headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error();
+      signedInUser = null;
+      renderAccount();
+      renderWatchlist([]);
+      notify("You have signed out.");
+    } catch {
+      button.disabled = false;
+      notify("Could not sign out. Please try again.");
+    }
+  });
+}
+
+async function initializeAccount() {
   try {
-    const response = await fetch("/api/watchlist");
+    const response = await fetch("/api/auth/me", { headers: { Accept: "application/json" } });
+    const data = await response.json();
+    signedInUser = data.user || null;
+  } catch {
+    signedInUser = null;
+  }
+  renderAccount();
+  await loadWatchlist();
+}
+
+async function loadWatchlist() {
+  if (!signedInUser) {
+    renderWatchlist([]);
+    return;
+  }
+  try {
+    const response = await fetch("/api/watchlist", { headers: { Accept: "application/json" } });
+    if (response.status === 401) {
+      signedInUser = null;
+      renderAccount();
+      renderWatchlist([]);
+      return;
+    }
     if (!response.ok) throw new Error("Watchlist request failed.");
     const data = await response.json();
     renderWatchlist(data.items || []);
@@ -483,7 +575,7 @@ function renderWatchlist(items) {
 }
 
 $("#refreshButton").addEventListener("click", loadWatchlist);
-loadWatchlist();
+initializeAccount();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 }
