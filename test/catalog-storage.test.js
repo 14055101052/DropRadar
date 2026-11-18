@@ -52,6 +52,15 @@ test("SQLite migrations, catalogue upsert, search and price history work togethe
     ).all(first.offerId);
     assert.deepEqual(observations.map((row) => row.price), [24999, 23999]);
 
+    const userA = "11111111-1111-4111-8111-111111111111";
+    const userB = "22222222-2222-4222-8222-222222222222";
+    sqlite.prepare("INSERT INTO app_users (id,email,password_hash) VALUES (?,?,?)").run(userA,"a@example.test","hash");
+    sqlite.prepare("INSERT INTO app_users (id,email,password_hash) VALUES (?,?,?)").run(userB,"b@example.test","hash");
+    const sameUrl = "https://www.flipkart.com/shared-product/p/itm999";
+    sqlite.prepare("INSERT INTO watchlist (url,title,merchant,user_id) VALUES (?,?,?,?)").run(sameUrl,"Shared product","Flipkart",userA);
+    sqlite.prepare("INSERT INTO watchlist (url,title,merchant,user_id) VALUES (?,?,?,?)").run(sameUrl,"Shared product","Flipkart",userB);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM watchlist WHERE url=?").get(sameUrl).count,2);
+
     const statuses = await providerStatuses(storage);
     assert.equal(statuses.find((row) => row.id === "flipkart-affiliate-api").status, "not_connected");
   } finally {
