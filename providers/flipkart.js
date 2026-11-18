@@ -1,6 +1,6 @@
 "use strict";
 
-const { ingestOffer } = require("../db/catalog");
+const { ingestOffer, markProviderSuccess } = require("../db/catalog");
 
 const PROVIDER_ID = "flipkart-affiliate-api";
 const SEARCH_URL = "https://affiliate-api.flipkart.net/affiliate/1.0/search.json";
@@ -79,6 +79,7 @@ async function searchAndIngest(storage, query) {
     await ingestOffer(storage, offer);
     ingested += 1;
   }
+  await markProviderSuccess(storage, PROVIDER_ID, "Flipkart Affiliate API");
   return { connected: true, ingested };
 }
 
