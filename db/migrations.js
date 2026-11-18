@@ -169,6 +169,33 @@ const MIGRATIONS = [
       "ALTER TABLE watchlist ADD COLUMN user_id TEXT REFERENCES app_users(id) ON DELETE CASCADE",
       "CREATE INDEX IF NOT EXISTS idx_watchlist_user_created ON watchlist (user_id, created_at DESC)"
     ]
+  },
+  {
+    version: 4,
+    postgres: [
+      "ALTER TABLE watchlist DROP CONSTRAINT IF EXISTS watchlist_url_key",
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_watchlist_user_url ON watchlist (user_id,url)"
+    ],
+    sqlite: [
+      `CREATE TABLE watchlist_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        url TEXT NOT NULL,
+        title TEXT NOT NULL,
+        merchant TEXT NOT NULL,
+        target_price REAL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        catalog_product_id TEXT REFERENCES catalog_products(id) ON DELETE SET NULL,
+        store_offer_id TEXT REFERENCES store_offers(id) ON DELETE SET NULL,
+        user_id TEXT REFERENCES app_users(id) ON DELETE CASCADE,
+        UNIQUE(user_id,url)
+      )`,
+      "INSERT INTO watchlist_new (id,url,title,merchant,target_price,created_at,catalog_product_id,store_offer_id,user_id) SELECT id,url,title,merchant,target_price,created_at,catalog_product_id,store_offer_id,user_id FROM watchlist",
+      "DROP TABLE watchlist",
+      "ALTER TABLE watchlist_new RENAME TO watchlist",
+      "CREATE INDEX IF NOT EXISTS idx_watchlist_catalog_product ON watchlist (catalog_product_id)",
+      "CREATE INDEX IF NOT EXISTS idx_watchlist_store_offer ON watchlist (store_offer_id)",
+      "CREATE INDEX IF NOT EXISTS idx_watchlist_user_created ON watchlist (user_id,created_at DESC)"
+    ]
   }
 ];
 
